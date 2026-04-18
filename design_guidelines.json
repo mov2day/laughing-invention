@@ -1,0 +1,123 @@
+{
+  "project_name": "TestCapture AI",
+  "theme": "DARK",
+  "archetype": "4 (Swiss & High-Contrast) - Dark Adaptation",
+  "aesthetic": "Engineered Obsidian (Linear × Retool × Raycast × Vercel)",
+  "core_philosophy": "Precision, raw performance, 'closer to the metal'. Matte dark surfaces, 1px solid borders, mono-spaced data points, high-contrast text.",
+  "colors": {
+    "background": {
+      "main": "#0A0A0A",
+      "surface": "#121212",
+      "elevated": "#18181B"
+    },
+    "border": {
+      "default": "#27272A",
+      "hover": "#3F3F46"
+    },
+    "text": {
+      "primary": "#FAFAFA",
+      "secondary": "#A1A1AA",
+      "tertiary": "#71717A"
+    },
+    "accents": {
+      "brand": "#FFFFFF",
+      "brand_text": "#000000",
+      "record_active": "#EF4444",
+      "framework_blue": "#3B82F6",
+      "validate_success": "#10B981",
+      "selector_warning": "#F59E0B"
+    }
+  },
+  "typography": {
+    "fonts": {
+      "headings": "Outfit, sans-serif",
+      "body": "Geist, Inter, sans-serif",
+      "mono": "JetBrains Mono, Roboto Mono, monospace"
+    },
+    "rules": {
+      "headings": "Tracking-tight, bold to black weights, never Inter.",
+      "body": "Clean, highly legible, moderate line height (leading-relaxed for paragraphs).",
+      "mono": "Used strictly for DOM selectors, code blocks, framework tabs, and numeric counters (timer/steps).",
+      "hierarchy": {
+        "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tighter",
+        "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight",
+        "h3": "text-xl sm:text-2xl font-semibold",
+        "h4": "text-lg sm:text-xl font-medium",
+        "body": "text-base text-zinc-400",
+        "small": "text-sm text-zinc-500",
+        "micro": "text-xs font-mono uppercase tracking-widest text-zinc-500"
+      }
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "Dense for app surfaces (Control Room), Generous for marketing (Swiss Grid).",
+    "dashboard_grid": "MODE B (Control Room): Tight gaps (gap-px or gap-4). Every pixel utilized. H-full on children.",
+    "marketing_grid": "MODE A (Tetris Grid): Wide gaps (gap-8 to gap-12). Asymmetry, bento boxes with empty cells.",
+    "borders": "Expose the skeleton. Use grid borders (`border-r border-b border-zinc-800`).",
+    "radii": "Minimal. `rounded-none` or `rounded-md` (4px to 6px max). No pill shapes unless it's a specific status badge."
+  },
+  "component_strategy": {
+    "general": "Do not use standard Vercel/Stripe look. Use 'Grid Borders' and 'Terminal' micro-themes.",
+    "buttons": "Flat, 1px border. Primary: bg-white text-black hover:bg-zinc-200. Secondary: bg-transparent border-zinc-700 text-white hover:bg-zinc-800.",
+    "cards": "Cardless approach preferred in dashboard. Use 1px border-zinc-800 with bg-[#0A0A0A]. For elevated popups, use bg-[#121212] with shadow-xl.",
+    "inputs": "Shadcn based. bg-transparent, border-zinc-800, focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500.",
+    "icons": "Use Phosphor Icons (Duotone for marketing, Regular/Fill for app) or Lucide-react."
+  },
+  "motion_and_interactions": {
+    "hover_states": "Crisp transitions. Text must turn bright white on hover. Borders lighten to zinc-600.",
+    "record_button": "Pulsing red shadow (drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]) when active.",
+    "loading": "Use mono-spaced text 'LOADING...' or simple ASCII/geometric spinners. No soft generic spinners.",
+    "timeline": "Staggered fade-up (Framer Motion) for newly recorded steps."
+  },
+  "surfaces_and_screens": {
+    "marketing_landing": {
+      "header": "Glassmorphism (`backdrop-blur-xl bg-[#0A0A0A]/60 border-b border-zinc-800/50`).",
+      "hero": "Massive Outfit typography. Overlay hero image with `bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/80 to-transparent`.",
+      "feature_grid": "Bento box style with 'Tracing Beam' border effect on hover.",
+      "comparison_table": "Technical grid, monospace headers, high contrast checkmarks."
+    },
+    "dashboard_app": {
+      "layout": "Full screen (h-screen). Fixed left sidebar (History/Sessions). Main view split: Left 40% (Timeline), Right 60% (Code & Inspector).",
+      "action_timeline": "Vertical scroll. Cards have left-border colored by action type (Blue=Click, Green=Assert, Purple=Type).",
+      "code_editor": "JetBrains Mono. Syntax highlighted. Tabs for Playwright, Cypress, Selenium, Karate.",
+      "element_inspector": "Dense tabular layout showing data-testid, aria, role, css, xpath with 'Stability Score' badges."
+    },
+    "extension_popup": {
+      "dimensions": "w-[380px] h-[560px]. Hard constraints.",
+      "header": "Compact. Contains 'TestCapture AI' logo, active domain, and Settings cog.",
+      "hero_action": "Massive, highly clickable 'Record' button with live timer (mono) and step counter.",
+      "recent_steps": "Miniature version of Action Timeline. Shows last 3 steps captured.",
+      "footer": "Dense action row: 'Open Dashboard', 'Copy Code', 'Export'.",
+      "spacing": "Ultra-dense. Use `p-2`, `gap-2`, `text-xs`."
+    },
+    "settings_modal": {
+      "surface": "Glassmorphic overlay `bg-black/80`. Modal body `bg-[#121212] border border-zinc-800`.",
+      "fields": "Anthropic API Key input (masked), Model selection dropdown (Shadcn Select).",
+      "typography": "Mono-spaced labels for API configurations."
+    }
+  },
+  "media": {
+    "images": {
+      "hero_background": {
+        "url": "https://images.unsplash.com/photo-1759159347827-de3a54002de7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAxODF8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGRhcmslMjBnZW9tZXRyeSUyMHRlY2h8ZW58MHx8fHwxNzc2NTU2NTU1fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Rows of dark cubes with glowing green lines. Use for landing page hero background with heavy bottom gradient fade."
+      },
+      "code_feature": {
+        "url": "https://images.unsplash.com/photo-1753998943413-8cba1b923c0e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzF8MHwxfHNlYXJjaHwzfHxkZXZlbG9wZXIlMjBjb2RlJTIwcHJvZ3JhbW1pbmclMjBkYXJrfGVufDB8fHx8MTc3NjU1NjU1MHww&ixlib=rb-4.1.0&q=85",
+        "description": "Computer code displayed on screen. Use for 'Code Editor' feature block in marketing bento grid."
+      },
+      "abstract_tech": {
+        "url": "https://images.unsplash.com/photo-1774251227496-be00e0f2f883?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAxODF8MHwxfHNlYXJjaHwyfHxhYnN0cmFjdCUyMGRhcmslMjBnZW9tZXRyeSUyMHRlY2h8ZW58MHx8fHwxNzc2NTU2NTU1fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Abstract cube made of smaller cubes. Use for 'Element Inspector' feature block background."
+      }
+    },
+    "icons_and_logos": {
+      "instructions": "Use React Icons (SiPlaywright, SiCypress, SiSelenium) or Phosphor icons for framework logos. Do NOT use placeholder text or generic missing images."
+    }
+  },
+  "accessibility_and_testing": {
+    "testing_attributes": "All interactive elements MUST have `data-testid` (e.g., `data-testid=\"record-btn\"`, `data-testid=\"export-code-btn\"`).",
+    "contrast": "Ensure text contrast meets APCA/WCAG standards. Use Text Shadow over background images.",
+    "focus_states": "All buttons/inputs must have `focus:ring-2 focus:ring-zinc-400 focus:outline-none`."
+  }
+}

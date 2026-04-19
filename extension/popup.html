@@ -53,6 +53,11 @@
         </button>
         <button class="tc-btn tc-btn-secondary" id="tc-pause-btn" disabled data-testid="popup-pause-btn">PAUSE</button>
       </div>
+      <label class="tc-assert-toggle" title="When ON, any click captures as an assertion (validate visible). Shift+Click always creates an assertion regardless.">
+        <input type="checkbox" id="tc-assert-mode" data-testid="popup-assert-mode"/>
+        <span class="tc-assert-label"><span class="tc-assert-dot"></span> ASSERT MODE</span>
+        <span class="tc-assert-hint">click = validate</span>
+      </label>
     </section>
 
     <section class="tc-recent">

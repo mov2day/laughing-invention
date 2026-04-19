@@ -1,48 +1,44 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Highlight, themes } from "prism-react-renderer";
-import { Copy, Download, RefreshCw, Play, Square, Pause, Plus, Settings as SettingsIcon } from "lucide-react";
+import { Copy, Download, RefreshCw, Plus, Trash2, Settings as SettingsIcon, ShieldCheck, X, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { demoSession } from "@/data/demoSession";
 import { offlineGenerate } from "@/lib/generate";
 import { useSettings } from "@/context/SettingsContext";
 import SettingsModal from "@/components/SettingsModal";
+import AddAssertionModal from "@/components/AddAssertionModal";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
 const FRAMEWORKS = [
-  { id: "playwright", label: "Playwright", lang: "typescript" },
-  { id: "cypress", label: "Cypress", lang: "javascript" },
-  { id: "selenium", label: "Selenium (Python)", lang: "python" },
-  { id: "karate", label: "Karate", lang: "gherkin" },
+  { id: "playwright", label: "Playwright" },
+  { id: "cypress", label: "Cypress" },
+  { id: "selenium", label: "Selenium" },
+  { id: "karate", label: "Karate" },
 ];
 
 const TYPE_COLOR = {
-  click: "bar-click",
-  type: "bar-type",
-  navigate: "bar-navigate",
-  validate: "bar-validate",
-  select: "bar-select",
+  click: "bar-click", type: "bar-type", navigate: "bar-navigate", validate: "bar-validate", select: "bar-select",
 };
 
 export default function Dashboard() {
   const { settings } = useSettings();
-  const [sessions] = useState([demoSession, exampleSession2()]);
+  const [sessions, setSessions] = useState(() => [clone(demoSession), exampleSession2()]);
   const [currentId, setCurrentId] = useState(demoSession.id);
-  const session = sessions.find((s) => s.id === currentId) || demoSession;
+  const session = sessions.find((s) => s.id === currentId) || sessions[0];
   const [framework, setFramework] = useState(settings.framework || "playwright");
   const [activeStepId, setActiveStepId] = useState(session.steps[0]?.id);
   const [code, setCode] = useState("");
   const [codeMeta, setCodeMeta] = useState("OFFLINE");
   const [isGenerating, setIsGenerating] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [addAssertOpen, setAddAssertOpen] = useState(false);
   const [toast, setToast] = useState(null);
+  const [inspectorTab, setInspectorTab] = useState("selectors"); // selectors | assertions | properties
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
 
-  useEffect(() => {
-    // Initial offline render for instant first paint
-    setCode(offlineGenerate(session, framework));
-    setCodeMeta("OFFLINE");
-  }, [currentId, framework]); // eslint-disable-line
+  useEffect(() => { setCode(offlineGenerate(session, framework)); setCodeMeta("OFFLINE"); }, [currentId, framework, session]);
 
   const activeStep = useMemo(
     () => session.steps.find((s) => s.id === activeStepId) || session.steps[0],
@@ -50,69 +46,78 @@ export default function Dashboard() {
   );
   useEffect(() => setActiveStepId(session.steps[0]?.id), [currentId]); // eslint-disable-line
 
+  function updateSession(updater) {
+    setSessions((prev) => prev.map((s) => (s.id === currentId ? updater(clone(s)) : s)));
+  }
+
   async function generateWithAI() {
     setIsGenerating(true);
     setCodeMeta("GENERATING…");
     try {
       const res = await axios.post(`${API}/generate-script`, {
-        session,
-        framework,
+        session, framework,
         apiKey: settings.apiKey || undefined,
-        model: settings.model,
-        provider: settings.provider || "anthropic",
+        model: settings.model, provider: settings.provider || "anthropic",
       });
       if (res.data?.code) {
         setCode(res.data.code);
         setCodeMeta((res.data.model || "LLM").toUpperCase());
-        showToast(res.data.model === "offline-template" ? "Offline template (add API key in Settings)" : "Generated");
+        showToast(res.data.model === "offline-template" ? "Using offline template — add key in Settings" : `Generated with ${res.data.model}`);
       }
     } catch (e) {
       console.error(e);
       setCode(offlineGenerate(session, framework));
       setCodeMeta("OFFLINE · FALLBACK");
       showToast("AI call failed — showing offline template");
-    } finally {
-      setIsGenerating(false);
-    }
+    } finally { setIsGenerating(false); }
   }
 
-  function copy() {
-    navigator.clipboard.writeText(code);
-    showToast("Copied to clipboard");
-  }
+  function copy() { navigator.clipboard.writeText(code); showToast("Copied to clipboard"); }
   function download() {
     const ext = { playwright: "spec.ts", cypress: "cy.js", selenium: "py", karate: "feature" }[framework] || "txt";
-    const blob = new Blob([code], { type: "text/plain" });
+    const blob = new Blob([code], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `testcapture-${session.id}.${ext}`; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    a.href = url; a.download = `testcapture-${session.id}.${ext}`; a.rel = "noopener";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    showToast(`Downloaded .${ext}`);
   }
-  function showToast(msg) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 1800);
+  function showToast(msg) { setToast(msg); setTimeout(() => setToast(null), 2000); }
+
+  function addAssertion(assertion) {
+    updateSession((s) => {
+      const st = s.steps.find((x) => x.id === activeStep.id);
+      if (st) { st.assertions = [...(st.assertions || []), assertion]; }
+      return s;
+    });
+    showToast("Assertion added");
+  }
+  function removeAssertion(index) {
+    updateSession((s) => {
+      const st = s.steps.find((x) => x.id === activeStep.id);
+      if (st && st.assertions) st.assertions = st.assertions.filter((_, i) => i !== index);
+      return s;
+    });
+  }
+  function deleteStep(id) {
+    if (!confirm("Delete this step?")) return;
+    updateSession((s) => { s.steps = s.steps.filter((x) => x.id !== id); s.steps.forEach((x, i) => (x.stepNumber = i + 1)); return s; });
+    setActiveStepId(null);
+    showToast("Step deleted");
   }
 
-  const langForPrism = useMemo(() => {
-    const map = { playwright: "tsx", cypress: "javascript", selenium: "python", karate: "gherkin" };
-    return map[framework] || "javascript";
-  }, [framework]);
+  const langForPrism = useMemo(() => ({ playwright: "tsx", cypress: "javascript", selenium: "python", karate: "gherkin" }[framework] || "javascript"), [framework]);
 
   return (
     <div className="flex-1 min-h-0 flex">
       {/* Sidebar */}
-      <aside className="w-[260px] border-r border-zinc-800 p-5 flex flex-col min-h-0 bg-[#0A0A0A]">
+      <aside className="w-[240px] border-r border-zinc-800 p-4 flex flex-col min-h-0 bg-[#0A0A0A] shrink-0">
         <div className="micro text-zinc-500 mb-3">HISTORY</div>
         <div className="flex flex-col gap-1 overflow-auto flex-1" data-testid="sidebar-sessions">
           {sessions.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setCurrentId(s.id)}
-              data-testid={`session-item-${s.id}`}
-              className={`text-left border rounded p-3 bg-[#0F0F0F] transition-colors ${
-                s.id === currentId ? "border-white" : "border-zinc-800 hover:border-zinc-700"
-              }`}
-            >
+            <button key={s.id} onClick={() => setCurrentId(s.id)} data-testid={`session-item-${s.id}`}
+              className={`text-left border rounded p-3 bg-[#0F0F0F] transition-colors ${s.id === currentId ? "border-white" : "border-zinc-800 hover:border-zinc-700"}`}>
               <div className="text-sm font-semibold truncate">{s.name}</div>
               <div className="font-mono text-[10px] text-zinc-500 mt-1 uppercase tracking-[0.08em]">
                 {new Date(s.startTime).toLocaleDateString()} · {s.steps.length} steps · {s.status}
@@ -131,13 +136,13 @@ export default function Dashboard() {
       </aside>
 
       {/* Main */}
-      <section className="flex-1 flex flex-col min-h-0">
+      <section className="flex-1 flex flex-col min-h-0 min-w-0">
         {/* Topbar */}
-        <div className="border-b border-zinc-800 px-6 py-4 flex flex-wrap items-center gap-4 justify-between">
-          <div>
+        <div className="border-b border-zinc-800 px-6 py-4 flex flex-wrap items-center gap-3 justify-between">
+          <div className="min-w-0">
             <div className="micro text-zinc-500">SESSION</div>
-            <h1 className="font-display text-2xl font-bold tracking-tight mt-1" data-testid="dash-session-name">{session.name}</h1>
-            <div className="font-mono text-[11px] text-zinc-500 mt-1.5">
+            <h1 className="font-display text-xl sm:text-2xl font-bold tracking-tight mt-1 truncate" data-testid="dash-session-name">{session.name}</h1>
+            <div className="font-mono text-[11px] text-zinc-500 mt-1.5 truncate">
               {session.targetOrigin} · <span className="text-emerald-400">{session.status}</span> · {session.steps.length} steps
             </div>
           </div>
@@ -145,16 +150,9 @@ export default function Dashboard() {
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex border border-zinc-800 rounded overflow-hidden" role="tablist" data-testid="framework-tabs">
               {FRAMEWORKS.map((f) => (
-                <button
-                  key={f.id}
-                  onClick={() => setFramework(f.id)}
-                  className={`px-3 py-2 font-mono text-[11px] uppercase tracking-[0.1em] border-r border-zinc-800 last:border-r-0 transition-colors ${
-                    framework === f.id ? "bg-white text-black" : "text-zinc-400 hover:text-white hover:bg-zinc-900"
-                  }`}
-                  data-testid={`framework-tab-${f.id}`}
-                >
-                  {f.label}
-                </button>
+                <button key={f.id} onClick={() => setFramework(f.id)}
+                  className={`px-3 py-2 font-mono text-[11px] uppercase tracking-[0.1em] border-r border-zinc-800 last:border-r-0 transition-colors ${framework === f.id ? "bg-white text-black" : "text-zinc-400 hover:text-white hover:bg-zinc-900"}`}
+                  data-testid={`framework-tab-${f.id}`}>{f.label}</button>
               ))}
             </div>
             <button className="btn" onClick={generateWithAI} disabled={isGenerating} data-testid="regen-btn">
@@ -162,11 +160,17 @@ export default function Dashboard() {
             </button>
             <button className="btn btn-primary" onClick={copy} data-testid="copy-code-btn"><Copy size={12}/> Copy</button>
             <button className="btn" onClick={download} data-testid="download-btn"><Download size={12}/> Download</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setInspectorCollapsed((v) => !v)} title="Toggle inspector" data-testid="toggle-inspector-btn">
+              {inspectorCollapsed ? <PanelRightOpen size={14}/> : <PanelRightClose size={14}/>}
+            </button>
           </div>
         </div>
 
         {/* 3-column control room */}
-        <div className="grid grid-cols-[360px_1fr_340px] flex-1 min-h-0 overflow-hidden">
+        <div
+          className="grid flex-1 min-h-0 overflow-hidden"
+          style={{ gridTemplateColumns: inspectorCollapsed ? "minmax(280px, 340px) 1fr" : "minmax(280px, 340px) minmax(0, 1fr) minmax(300px, 360px)" }}
+        >
           {/* Action Timeline */}
           <div className="border-r border-zinc-800 flex flex-col min-h-0">
             <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
@@ -174,35 +178,50 @@ export default function Dashboard() {
               <span className="font-mono text-[10px] text-zinc-500">{session.steps.length} STEPS</span>
             </div>
             <div className="overflow-auto p-3 flex flex-col gap-1.5" data-testid="action-timeline">
+              {session.steps.length === 0 && <div className="text-zinc-600 text-sm text-center py-16">No steps left. Add a session via the extension.</div>}
               {session.steps.map((step, i) => (
-                <button
-                  key={step.id}
-                  onClick={() => setActiveStepId(step.id)}
-                  data-testid={`timeline-step-${step.stepNumber || i + 1}`}
-                  className={`text-left border rounded bg-[#0F0F0F] ${TYPE_COLOR[step.type] || ""} ${
-                    step.id === activeStepId ? "border-white bg-[#18181B]" : "border-zinc-800 hover:border-zinc-700"
-                  } p-3 transition-colors`}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-mono text-[10px] text-zinc-500 w-5">{String(i + 1).padStart(2, "0")}</span>
-                    <span className="text-[9px] font-mono uppercase tracking-[0.12em] px-1.5 py-0.5 rounded"
-                      style={{ background: colorFor(step.type), color: textFor(step.type) }}>{step.type}</span>
-                    <span className="ml-auto font-mono text-[10px] text-zinc-600">{ago(step.timestamp)}</span>
+                <div key={step.id} className="relative group">
+                  <button
+                    onClick={() => setActiveStepId(step.id)}
+                    data-testid={`timeline-step-${step.stepNumber || i + 1}`}
+                    className={`w-full text-left border rounded bg-[#0F0F0F] ${TYPE_COLOR[step.type] || ""} ${step.id === activeStep?.id ? "border-white bg-[#18181B]" : "border-zinc-800 hover:border-zinc-700"} p-3 transition-colors`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-mono text-[10px] text-zinc-500 w-5">{String(i + 1).padStart(2, "0")}</span>
+                      <span className="text-[9px] font-mono uppercase tracking-[0.12em] px-1.5 py-0.5 rounded"
+                        style={{ background: colorFor(step.type), color: textFor(step.type) }}>{step.type}</span>
+                      {step.assertions?.length > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-mono uppercase tracking-[0.1em] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                          <ShieldCheck size={9}/> {step.assertions.length}
+                        </span>
+                      )}
+                      <span className="ml-auto font-mono text-[10px] text-zinc-600">{ago(step.timestamp)}</span>
+                    </div>
+                    <div className="text-sm text-zinc-200 truncate">{step.label}</div>
+                    <div className="font-mono text-[10px] text-zinc-500 truncate mt-1">
+                      {step.selector?.strategy}: {step.selector?.value}
+                    </div>
+                  </button>
+                  <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                    <button onClick={(e) => { e.stopPropagation(); setActiveStepId(step.id); setAddAssertOpen(true); }}
+                      className="text-zinc-400 hover:text-emerald-400 p-1" title="Add assertion" data-testid={`timeline-add-assertion-${i + 1}`}>
+                      <ShieldCheck size={12}/>
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); deleteStep(step.id); }}
+                      className="text-zinc-400 hover:text-red-400 p-1" title="Delete step" data-testid={`timeline-delete-${i + 1}`}>
+                      <Trash2 size={12}/>
+                    </button>
                   </div>
-                  <div className="text-sm text-zinc-200 truncate">{step.label}</div>
-                  <div className="font-mono text-[10px] text-zinc-500 truncate mt-1">
-                    {step.selector?.strategy}: {step.selector?.value}
-                  </div>
-                </button>
+                </div>
               ))}
             </div>
           </div>
 
           {/* Code Editor */}
-          <div className="flex flex-col min-h-0 bg-[#0A0A0A]">
+          <div className="flex flex-col min-h-0 bg-[#0A0A0A] min-w-0">
             <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
-              <span className="micro text-zinc-500">{session.name} · {FRAMEWORKS.find(f => f.id === framework)?.label}</span>
-              <span className="font-mono text-[10px] text-zinc-400">{codeMeta}</span>
+              <span className="micro text-zinc-500 truncate">{session.name} · {FRAMEWORKS.find(f => f.id === framework)?.label}</span>
+              <span className="font-mono text-[10px] text-zinc-400 shrink-0">{codeMeta}</span>
             </div>
             <div className="overflow-auto flex-1" data-testid="code-editor">
               <Highlight theme={themes.nightOwl} code={code} language={langForPrism}>
@@ -211,9 +230,7 @@ export default function Dashboard() {
                     {tokens.map((line, idx) => (
                       <div key={idx} {...getLineProps({ line })}>
                         <span className="inline-block w-8 text-right pr-3 select-none text-zinc-700">{idx + 1}</span>
-                        {line.map((token, tIdx) => (
-                          <span key={tIdx} {...getTokenProps({ token })} />
-                        ))}
+                        {line.map((token, tIdx) => <span key={tIdx} {...getTokenProps({ token })} />)}
                       </div>
                     ))}
                   </pre>
@@ -223,42 +240,79 @@ export default function Dashboard() {
           </div>
 
           {/* Inspector */}
-          <div className="flex flex-col min-h-0 border-l border-zinc-800">
-            <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
-              <span className="micro text-zinc-500">ELEMENT INSPECTOR</span>
-            </div>
-            <div className="overflow-auto p-4 flex-1" data-testid="element-inspector">
-              {activeStep ? (
-                <>
-                  <div className="grid grid-cols-[80px_1fr] gap-2 font-mono text-[11px] leading-relaxed">
-                    <Row k="type" v={activeStep.type} />
-                    <Row k="tag" v={activeStep.elementProps?.tagName || "—"} />
-                    <Row k="id" v={activeStep.elementProps?.id || "—"} />
-                    <Row k="name" v={activeStep.elementProps?.name || "—"} />
-                    <Row k="text" v={(activeStep.elementProps?.text || "").slice(0, 120) || "—"} />
-                    <Row k="value" v={activeStep.value ?? "—"} />
-                    <Row k="url" v={(activeStep.url || "").slice(0, 80)} />
-                  </div>
-                  <div className="mt-6">
-                    <div className="micro text-zinc-500 mb-2">SELECTORS · PRIORITY ORDER</div>
-                    <div className="flex flex-col gap-1.5">
-                      {(activeStep.selector?.alternatives || []).map((a, i) => (
-                        <div key={i} className="grid grid-cols-[80px_1fr_48px] gap-2 items-center border border-zinc-800 rounded px-2 py-2 font-mono text-[11px]" data-testid={`selector-alt-${i}`}>
-                          <span className="text-zinc-500 uppercase tracking-[0.1em] text-[10px]">{a.strategy}</span>
-                          <span className="text-zinc-200 truncate">{a.value}</span>
-                          <span className={`text-center rounded py-[3px] text-[9px] font-bold tracking-[0.12em] ${stabilityClass(a.strategy)}`}>
-                            {stabilityLabel(a.strategy)}
-                          </span>
+          {!inspectorCollapsed && (
+            <div className="flex flex-col min-h-0 border-l border-zinc-800">
+              <div className="px-0 py-0 border-b border-zinc-800 flex items-stretch">
+                {[
+                  { id: "selectors", label: "Selectors" },
+                  { id: "assertions", label: "Assertions" },
+                  { id: "properties", label: "Properties" },
+                ].map((t) => (
+                  <button key={t.id} onClick={() => setInspectorTab(t.id)}
+                    className={`flex-1 px-2 py-3 font-mono text-[10px] uppercase tracking-[0.12em] border-r border-zinc-800 last:border-r-0 transition-colors ${inspectorTab === t.id ? "bg-[#18181B] text-white" : "text-zinc-500 hover:text-white"}`}
+                    data-testid={`inspector-tab-${t.id}`}>{t.label}</button>
+                ))}
+              </div>
+              <div className="overflow-auto p-4 flex-1" data-testid="element-inspector">
+                {activeStep ? (
+                  <>
+                    {inspectorTab === "properties" && (
+                      <div className="grid grid-cols-[70px_1fr] gap-2 font-mono text-[11px] leading-relaxed">
+                        <Row k="type" v={activeStep.type} />
+                        <Row k="tag" v={activeStep.elementProps?.tagName || "—"} />
+                        <Row k="id" v={activeStep.elementProps?.id || "—"} />
+                        <Row k="name" v={activeStep.elementProps?.name || "—"} />
+                        <Row k="text" v={(activeStep.elementProps?.text || "").slice(0, 200) || "—"} />
+                        <Row k="value" v={activeStep.value ?? "—"} />
+                        <Row k="url" v={(activeStep.url || "").slice(0, 160)} />
+                      </div>
+                    )}
+                    {inspectorTab === "selectors" && (
+                      <div>
+                        <div className="micro text-zinc-500 mb-2">PRIORITY ORDER</div>
+                        <div className="flex flex-col gap-1.5">
+                          {(activeStep.selector?.alternatives || []).map((a, i) => (
+                            <div key={i} className="grid grid-cols-[80px_1fr_48px] gap-2 items-center border border-zinc-800 rounded px-2 py-2 font-mono text-[11px]" data-testid={`selector-alt-${i}`}>
+                              <span className="text-zinc-500 uppercase tracking-[0.1em] text-[10px]">{a.strategy}</span>
+                              <span className="text-zinc-200 truncate" title={a.value}>{a.value}</span>
+                              <span className={`text-center rounded py-[3px] text-[9px] font-bold tracking-[0.12em] ${stabilityClass(a.strategy)}`}>{stabilityLabel(a.strategy)}</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="text-zinc-600 text-sm text-center py-16">Select a step to inspect.</div>
-              )}
+                      </div>
+                    )}
+                    {inspectorTab === "assertions" && (
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="micro text-zinc-500">{activeStep.assertions?.length || 0} ASSERTION{(activeStep.assertions?.length || 0) === 1 ? "" : "S"}</div>
+                          <button className="btn btn-sm" onClick={() => setAddAssertOpen(true)} data-testid="add-assertion-btn">
+                            <Plus size={11}/> Add
+                          </button>
+                        </div>
+                        {(activeStep.assertions || []).length === 0 ? (
+                          <div className="text-zinc-600 text-[12px] border border-dashed border-zinc-800 rounded p-4 text-center leading-relaxed">
+                            No assertions yet.<br/>Add one above, or <span className="font-mono text-zinc-400">Shift+Click</span> during recording.
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-1.5">
+                            {activeStep.assertions.map((a, i) => (
+                              <div key={i} className="grid grid-cols-[90px_1fr_28px] gap-2 items-center border border-emerald-500/30 bg-emerald-500/5 rounded px-2 py-2 font-mono text-[11px]" data-testid={`assertion-item-${i}`}>
+                                <span className="text-emerald-400 uppercase tracking-[0.1em] text-[10px]">{a.type}</span>
+                                <span className="text-zinc-200 truncate" title={a.expected || a.target || ""}>{a.expected ?? a.target ?? "—"}</span>
+                                <button onClick={() => removeAssertion(i)} className="text-zinc-500 hover:text-red-400" data-testid={`remove-assertion-${i}`}><X size={12}/></button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-zinc-600 text-sm text-center py-16">Select a step to inspect.</div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {toast && (
@@ -269,6 +323,12 @@ export default function Dashboard() {
       </section>
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <AddAssertionModal
+        open={addAssertOpen}
+        onClose={() => setAddAssertOpen(false)}
+        defaultExpected={activeStep?.value || activeStep?.elementProps?.text || ""}
+        onAdd={(a) => { addAssertion(a); setAddAssertOpen(false); }}
+      />
     </div>
   );
 }
@@ -287,21 +347,17 @@ function stabilityClass(s) {
   if (["role", "id", "role+text"].includes(s)) return "stability-medium";
   return "stability-low";
 }
-function stabilityLabel(s) {
-  return stabilityClass(s).replace("stability-", "").toUpperCase();
-}
-function colorFor(t) {
-  return { click: "#3B82F6", type: "#A855F7", navigate: "#F59E0B", validate: "#10B981", select: "#22D3EE" }[t] || "#A1A1AA";
-}
-function textFor(t) {
-  return t === "click" || t === "type" ? "#fff" : "#000";
-}
+function stabilityLabel(s) { return stabilityClass(s).replace("stability-", "").toUpperCase(); }
+function colorFor(t) { return { click: "#3B82F6", type: "#A855F7", navigate: "#F59E0B", validate: "#10B981", select: "#22D3EE" }[t] || "#A1A1AA"; }
+function textFor(t) { return t === "click" || t === "type" ? "#fff" : "#000"; }
 function ago(ts) {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60); if (m < 60) return `${m}m`;
   const h = Math.floor(m / 60); return `${h}h`;
 }
+
+function clone(x) { return JSON.parse(JSON.stringify(x)); }
 
 function exampleSession2() {
   return {
@@ -314,12 +370,12 @@ function exampleSession2() {
     selectedFramework: "playwright",
     generatedCode: {},
     steps: [
-      { id: "a1", stepNumber: 1, type: "navigate", label: "Navigate to app.example.dev", timestamp: Date.now() - 1000 * 60 * 60 * 3, selector: { strategy: "url", value: "https://app.example.dev", stability: "high", alternatives: [{ strategy: "url", value: "https://app.example.dev" }] }, value: "https://app.example.dev", elementProps: {}, url: "https://app.example.dev" },
-      { id: "a2", stepNumber: 2, type: "click", label: "Click aria-label: Search", timestamp: Date.now() - 1000 * 60 * 60 * 3, selector: { strategy: "aria-label", value: "Search", stability: "high", alternatives: [{ strategy: "aria-label", value: "Search" }, { strategy: "role", value: "searchbox" }, { strategy: "css", value: "header input[type=search]" }] }, elementProps: { tagName: "INPUT", type: "search" }, url: "https://app.example.dev" },
-      { id: "a3", stepNumber: 3, type: "type", label: "Type into aria-label: Search", timestamp: Date.now() - 1000 * 60 * 60 * 3, selector: { strategy: "aria-label", value: "Search", stability: "high", alternatives: [{ strategy: "aria-label", value: "Search" }] }, value: "invoices 2025", elementProps: { tagName: "INPUT" }, url: "https://app.example.dev" },
-      { id: "a4", stepNumber: 4, type: "select", label: "Filter status = Paid", timestamp: Date.now() - 1000 * 60 * 60 * 3, selector: { strategy: "data-testid", value: "status-filter", stability: "high", alternatives: [{ strategy: "data-testid", value: "status-filter" }] }, value: "paid", elementProps: { tagName: "SELECT" }, url: "https://app.example.dev" },
-      { id: "a5", stepNumber: 5, type: "click", label: "Click Export CSV", timestamp: Date.now() - 1000 * 60 * 60 * 3, selector: { strategy: "data-testid", value: "export-csv-btn", stability: "high", alternatives: [{ strategy: "data-testid", value: "export-csv-btn" }, { strategy: "role+text", value: "button:Export CSV" }] }, elementProps: { tagName: "BUTTON", text: "Export CSV" }, url: "https://app.example.dev" },
-      { id: "a6", stepNumber: 6, type: "validate", label: "Assert toast contains Exported", timestamp: Date.now() - 1000 * 60 * 60 * 3, selector: { strategy: "role+text", value: "status:Exported", stability: "medium", alternatives: [{ strategy: "role+text", value: "status:Exported" }, { strategy: "css", value: ".toast" }] }, value: "Exported", elementProps: { tagName: "DIV", text: "Exported 42 rows" }, url: "https://app.example.dev" },
+      { id: "a1", stepNumber: 1, type: "navigate", label: "Navigate to app.example.dev", timestamp: Date.now() - 1000 * 60 * 60 * 3, selector: { strategy: "url", value: "https://app.example.dev", stability: "high", alternatives: [{ strategy: "url", value: "https://app.example.dev" }] }, value: "https://app.example.dev", elementProps: {}, url: "https://app.example.dev", assertions: [] },
+      { id: "a2", stepNumber: 2, type: "click", label: "Click aria-label: Search", timestamp: Date.now() - 1000 * 60 * 60 * 3, selector: { strategy: "aria-label", value: "Search", stability: "high", alternatives: [{ strategy: "aria-label", value: "Search" }, { strategy: "role", value: "searchbox" }, { strategy: "css", value: "header input[type=search]" }] }, elementProps: { tagName: "INPUT", type: "search" }, url: "https://app.example.dev", assertions: [] },
+      { id: "a3", stepNumber: 3, type: "type", label: "Type into aria-label: Search", timestamp: Date.now() - 1000 * 60 * 60 * 3, selector: { strategy: "aria-label", value: "Search", stability: "high", alternatives: [{ strategy: "aria-label", value: "Search" }] }, value: "invoices 2025", elementProps: { tagName: "INPUT" }, url: "https://app.example.dev", assertions: [] },
+      { id: "a4", stepNumber: 4, type: "select", label: "Filter status = Paid", timestamp: Date.now() - 1000 * 60 * 60 * 3, selector: { strategy: "data-testid", value: "status-filter", stability: "high", alternatives: [{ strategy: "data-testid", value: "status-filter" }] }, value: "paid", elementProps: { tagName: "SELECT" }, url: "https://app.example.dev", assertions: [] },
+      { id: "a5", stepNumber: 5, type: "click", label: "Click Export CSV", timestamp: Date.now() - 1000 * 60 * 60 * 3, selector: { strategy: "data-testid", value: "export-csv-btn", stability: "high", alternatives: [{ strategy: "data-testid", value: "export-csv-btn" }, { strategy: "role+text", value: "button:Export CSV" }] }, elementProps: { tagName: "BUTTON", text: "Export CSV" }, url: "https://app.example.dev", assertions: [] },
+      { id: "a6", stepNumber: 6, type: "validate", label: "Assert toast contains Exported", timestamp: Date.now() - 1000 * 60 * 60 * 3, selector: { strategy: "role+text", value: "status:Exported", stability: "medium", alternatives: [{ strategy: "role+text", value: "status:Exported" }, { strategy: "css", value: ".toast" }] }, value: "Exported", elementProps: { tagName: "DIV", text: "Exported 42 rows" }, url: "https://app.example.dev", assertions: [{ type: "containsText", expected: "Exported" }] },
     ],
   };
 }

@@ -1,5 +1,6 @@
 /* TestCapture AI — popup styles (Engineered Obsidian) */
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; padding: 0; }
 body.tc-popup {
   width: 380px; height: 560px;
@@ -56,6 +57,21 @@ body.tc-popup {
 
 .tc-input { width: 100%; margin-bottom: 10px; }
 .tc-controls { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; }
+.tc-assert-toggle {
+  display: flex; align-items: center; gap: 8px; margin-top: 10px;
+  padding: 7px 10px; border: 1px solid #27272A; border-radius: 4px; cursor: pointer;
+  background: #0F0F0F; user-select: none;
+  transition: border-color 120ms, background 120ms;
+}
+.tc-assert-toggle:hover { border-color: #3F3F46; }
+.tc-assert-toggle input { appearance: none; width: 28px; height: 16px; border-radius: 8px; background: #27272A; position: relative; cursor: pointer; transition: background 160ms; }
+.tc-assert-toggle input::after { content:""; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:#A1A1AA; transition: left 160ms, background 160ms; }
+.tc-assert-toggle input:checked { background: #10B981; }
+.tc-assert-toggle input:checked::after { left: 14px; background: #fff; }
+.tc-assert-label { font: 700 10px/1 "JetBrains Mono", monospace; letter-spacing: 0.14em; display: inline-flex; align-items: center; gap: 6px; }
+.tc-assert-dot { width: 6px; height: 6px; border-radius: 50%; background: #10B981; display: inline-block; }
+.tc-assert-hint { margin-left: auto; font: 500 10px/1 "JetBrains Mono", monospace; color: #71717A; letter-spacing: 0.04em; }
+.tc-assert-toggle.is-on { border-color: #10B981; background: rgba(16,185,129,0.08); }
 
 .tc-btn {
   appearance: none; cursor: pointer; user-select: none;

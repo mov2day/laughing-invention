@@ -195,6 +195,56 @@ FRAMEWORK_TEMPLATES = {
 }
 
 
+def _assert_lines(framework: str, selector_val: str, strategy: str, assertions: List[Dict[str, Any]]) -> List[str]:
+    """Produce framework-specific lines for a list of structured assertions."""
+    out: List[str] = []
+    if not assertions:
+        return out
+    if framework == "playwright":
+        loc = (
+            f"page.getByTestId('{selector_val}')" if strategy == "data-testid"
+            else f"page.getByLabel('{selector_val}')" if strategy == "aria-label"
+            else f"page.getByRole('{selector_val}')" if strategy == "role"
+            else f"page.locator('{selector_val}')"
+        )
+        for a in assertions:
+            t = a.get("type", "containsText"); exp = a.get("expected") or ""
+            if t == "containsText": out.append(f"  await expect({loc}).toContainText('{exp}');")
+            elif t == "visible": out.append(f"  await expect({loc}).toBeVisible();")
+            elif t == "exists": out.append(f"  await expect({loc}).toBeAttached();")
+            elif t == "countEquals": out.append(f"  await expect({loc}).toHaveCount({int(exp or 1)});")
+            elif t == "valueEquals": out.append(f"  await expect({loc}).toHaveValue('{exp}');")
+            elif t == "urlContains": out.append(f"  await expect(page).toHaveURL(/{exp}/);")
+            else: out.append(f"  // assertion: {t} expected={exp}")
+    elif framework == "cypress":
+        get = f"cy.get('[data-testid=\"{selector_val}\"]')" if strategy == "data-testid" else f"cy.get('{selector_val}')"
+        for a in assertions:
+            t = a.get("type", "containsText"); exp = a.get("expected") or ""
+            if t == "containsText": out.append(f"    {get}.should('contain.text', '{exp}');")
+            elif t == "visible": out.append(f"    {get}.should('be.visible');")
+            elif t == "exists": out.append(f"    {get}.should('exist');")
+            elif t == "countEquals": out.append(f"    {get}.should('have.length', {int(exp or 1)});")
+            elif t == "valueEquals": out.append(f"    {get}.should('have.value', '{exp}');")
+            elif t == "urlContains": out.append(f"    cy.url().should('include', '{exp}');")
+    elif framework == "selenium":
+        by = "By.XPATH" if strategy == "xpath" else "By.CSS_SELECTOR"
+        val = f'[data-testid="{selector_val}"]' if strategy == "data-testid" else selector_val
+        for a in assertions:
+            t = a.get("type", "containsText"); exp = a.get("expected") or ""
+            if t == "containsText": out.append(f"    assert '{exp}' in driver.find_element({by}, '{val}').text")
+            elif t == "visible": out.append(f"    assert driver.find_element({by}, '{val}').is_displayed()")
+            elif t == "exists": out.append(f"    assert driver.find_element({by}, '{val}') is not None")
+            elif t == "valueEquals": out.append(f"    assert driver.find_element({by}, '{val}').get_attribute('value') == '{exp}'")
+            elif t == "urlContains": out.append(f"    assert '{exp}' in driver.current_url")
+    elif framework == "karate":
+        for a in assertions:
+            t = a.get("type", "containsText"); exp = a.get("expected") or ""
+            if t == "containsText": out.append(f'    * match text("{selector_val}") contains "{exp}"')
+            elif t == "visible": out.append(f'    * waitFor("{selector_val}")')
+            elif t == "urlContains": out.append(f'    * match driver.url contains "{exp}"')
+    return out
+
+
 def _fallback_generate(session: Dict[str, Any], framework: str) -> str:
     """Offline deterministic template used when no LLM key is available."""
     steps = session.get("steps", [])
@@ -232,12 +282,14 @@ def _fallback_generate(session: Dict[str, Any], framework: str) -> str:
                 lines.append(f"  await expect({locator}).toContainText('{exp}');")
             elif s["type"] == "select":
                 lines.append(f"  await {locator}.selectOption('{s.get('value','')}');")
+            # extra structured assertions on this step
+            lines.extend(_assert_lines("playwright", sel, strategy, s.get("assertions", [])))
         lines.append("});")
         return "\n".join(lines)
 
     if framework == "cypress":
         lines.append(f"describe('{name}', () => {{")
-        lines.append(f"  it('runs the captured flow', () => {{")
+        lines.append("  it('runs the captured flow', () => {")
         lines.append(f"    cy.visit('{origin}');")
         for s in steps:
             sel = (s.get("selector") or {}).get("value") or ""
@@ -251,6 +303,7 @@ def _fallback_generate(session: Dict[str, Any], framework: str) -> str:
                 lines.append(f"    cy.visit('{s.get('value','')}');")
             elif s["type"] == "validate":
                 lines.append(f"    {get}.should('contain.text', '{s.get('value','')}');")
+            lines.extend(_assert_lines("cypress", sel, strategy, s.get("assertions", [])))
         lines.append("  });")
         lines.append("});")
         return "\n".join(lines)
@@ -278,6 +331,7 @@ def _fallback_generate(session: Dict[str, Any], framework: str) -> str:
                 lines.append(f"    driver.get('{s.get('value','')}')")
             elif s["type"] == "validate":
                 lines.append(f"    assert '{s.get('value','')}' in driver.find_element({by}, '{sel}').text")
+            lines.extend(_assert_lines("selenium", sel, strategy, s.get("assertions", [])))
         lines.append("    driver.quit()")
         return "\n".join(lines)
 
@@ -289,6 +343,7 @@ def _fallback_generate(session: Dict[str, Any], framework: str) -> str:
     lines.append(f"    * driver '{origin}'")
     for s in steps:
         sel = (s.get("selector") or {}).get("value") or ""
+        strategy = (s.get("selector") or {}).get("strategy") or "css"
         if s["type"] == "click":
             lines.append(f"    * click(\"{sel}\")")
         elif s["type"] == "type":
@@ -297,6 +352,7 @@ def _fallback_generate(session: Dict[str, Any], framework: str) -> str:
             lines.append(f"    * driver '{s.get('value','')}'")
         elif s["type"] == "validate":
             lines.append(f"    * match text(\"{sel}\") contains \"{s.get('value','')}\"")
+        lines.extend(_assert_lines("karate", sel, strategy, s.get("assertions", [])))
     return "\n".join(lines)
 
 

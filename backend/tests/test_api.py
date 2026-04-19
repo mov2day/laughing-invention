@@ -1,6 +1,7 @@
 """
 TestCapture AI Backend API Tests
-Tests: health, root, generate-script, sessions CRUD
+Tests: health, root, generate-script (with assertions), sessions CRUD
+Iteration 2: Added assertion generation tests for all 4 frameworks
 """
 import pytest
 import requests
@@ -217,6 +218,174 @@ class TestGenerateScript:
         code = data["code"]
         assert len(code) > 0, "Expected non-empty code"
         print(f"✓ Password redaction test passed. Code length: {len(code)}")
+
+
+class TestAssertionGeneration:
+    """Tests for assertion generation in fallback mode (invalid apiKey triggers fallback)"""
+    
+    def test_playwright_assertions_visible_and_containsText(self):
+        """POST /api/generate-script with assertions=[{type:'visible'},{type:'containsText',expected:'Saved'}] 
+        and invalid apiKey - fallback must return code containing toBeVisible() and toContainText('Saved')"""
+        session_with_assertions = {
+            "id": "test-assertions-1",
+            "name": "Test Assertions",
+            "project": "test",
+            "status": "saved",
+            "startTime": 1700000000000,
+            "targetOrigin": "https://demo.app.com",
+            "selectedFramework": "playwright",
+            "steps": [
+                {
+                    "id": "s1",
+                    "stepNumber": 1,
+                    "type": "click",
+                    "label": "Click Save button",
+                    "timestamp": 1700000000000,
+                    "selector": {"strategy": "data-testid", "value": "save-btn", "stability": "high"},
+                    "elementProps": {"tagName": "BUTTON", "text": "Save"},
+                    "url": "https://demo.app.com",
+                    "assertions": [
+                        {"type": "visible"},
+                        {"type": "containsText", "expected": "Saved"}
+                    ]
+                }
+            ]
+        }
+        
+        response = requests.post(f"{API_URL}/generate-script", json={
+            "session": session_with_assertions,
+            "framework": "playwright",
+            "apiKey": "invalid-key-to-trigger-fallback"  # Invalid key triggers fallback
+        })
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+        data = response.json()
+        code = data["code"]
+        
+        # Verify fallback was used (model should be offline-template or contain error message)
+        # The code should contain assertion patterns
+        assert "toBeVisible()" in code, f"Expected toBeVisible() in code, got: {code}"
+        assert "toContainText('Saved')" in code, f"Expected toContainText('Saved') in code, got: {code}"
+        print(f"✓ Playwright assertions (visible + containsText) passed")
+    
+    def test_cypress_assertions_visible(self):
+        """POST /api/generate-script for cypress with assertions containing {type:'visible'} 
+        must produce should('be.visible')"""
+        session_with_assertions = {
+            "id": "test-cypress-assertions",
+            "name": "Test Cypress Assertions",
+            "project": "test",
+            "status": "saved",
+            "startTime": 1700000000000,
+            "targetOrigin": "https://demo.app.com",
+            "selectedFramework": "cypress",
+            "steps": [
+                {
+                    "id": "s1",
+                    "stepNumber": 1,
+                    "type": "click",
+                    "label": "Click element",
+                    "timestamp": 1700000000000,
+                    "selector": {"strategy": "data-testid", "value": "my-element", "stability": "high"},
+                    "elementProps": {"tagName": "BUTTON"},
+                    "url": "https://demo.app.com",
+                    "assertions": [
+                        {"type": "visible"}
+                    ]
+                }
+            ]
+        }
+        
+        response = requests.post(f"{API_URL}/generate-script", json={
+            "session": session_with_assertions,
+            "framework": "cypress",
+            "apiKey": "invalid-key-to-trigger-fallback"
+        })
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+        data = response.json()
+        code = data["code"]
+        
+        assert "should('be.visible')" in code, f"Expected should('be.visible') in code, got: {code}"
+        print(f"✓ Cypress assertions (visible) passed")
+    
+    def test_selenium_assertions_urlContains(self):
+        """POST /api/generate-script for selenium with {type:'urlContains',expected:'/app'} 
+        must produce assert '/app' in driver.current_url"""
+        session_with_assertions = {
+            "id": "test-selenium-assertions",
+            "name": "Test Selenium Assertions",
+            "project": "test",
+            "status": "saved",
+            "startTime": 1700000000000,
+            "targetOrigin": "https://demo.app.com",
+            "selectedFramework": "selenium",
+            "steps": [
+                {
+                    "id": "s1",
+                    "stepNumber": 1,
+                    "type": "click",
+                    "label": "Click element",
+                    "timestamp": 1700000000000,
+                    "selector": {"strategy": "css", "value": "#my-element", "stability": "medium"},
+                    "elementProps": {"tagName": "BUTTON"},
+                    "url": "https://demo.app.com",
+                    "assertions": [
+                        {"type": "urlContains", "expected": "/app"}
+                    ]
+                }
+            ]
+        }
+        
+        response = requests.post(f"{API_URL}/generate-script", json={
+            "session": session_with_assertions,
+            "framework": "selenium",
+            "apiKey": "invalid-key-to-trigger-fallback"
+        })
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+        data = response.json()
+        code = data["code"]
+        
+        assert "'/app' in driver.current_url" in code, f"Expected '/app' in driver.current_url in code, got: {code}"
+        print(f"✓ Selenium assertions (urlContains) passed")
+    
+    def test_karate_assertions_containsText(self):
+        """POST /api/generate-script for karate with {type:'containsText',expected:'Welcome'} 
+        must produce match text(...) contains "Welcome" """
+        session_with_assertions = {
+            "id": "test-karate-assertions",
+            "name": "Test Karate Assertions",
+            "project": "test",
+            "status": "saved",
+            "startTime": 1700000000000,
+            "targetOrigin": "https://demo.app.com",
+            "selectedFramework": "karate",
+            "steps": [
+                {
+                    "id": "s1",
+                    "stepNumber": 1,
+                    "type": "click",
+                    "label": "Click element",
+                    "timestamp": 1700000000000,
+                    "selector": {"strategy": "css", "value": "#welcome-msg", "stability": "medium"},
+                    "elementProps": {"tagName": "DIV"},
+                    "url": "https://demo.app.com",
+                    "assertions": [
+                        {"type": "containsText", "expected": "Welcome"}
+                    ]
+                }
+            ]
+        }
+        
+        response = requests.post(f"{API_URL}/generate-script", json={
+            "session": session_with_assertions,
+            "framework": "karate",
+            "apiKey": "invalid-key-to-trigger-fallback"
+        })
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+        data = response.json()
+        code = data["code"]
+        
+        assert 'match text' in code and 'contains "Welcome"' in code, f"Expected match text(...) contains 'Welcome' in code, got: {code}"
+        print(f"✓ Karate assertions (containsText) passed")
 
 
 class TestSessionsCRUD:

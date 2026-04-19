@@ -46,11 +46,17 @@ function bindEvents() {
     const code = $("#tc-code").textContent;
     if (!code) return;
     const ext = { playwright: "spec.ts", cypress: "cy.js", selenium: "py", karate: "feature" }[state.framework] || "txt";
+    const filename = `testcapture-${state.currentSession?.name?.replace(/\s+/g, "-") || "session"}.${ext}`;
     const blob = new Blob([code], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `testcapture.${ext}`; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (chrome.downloads?.download) {
+      chrome.downloads.download({ url, filename, saveAs: true }, () => setTimeout(() => URL.revokeObjectURL(url), 4000));
+    } else {
+      const a = document.createElement("a");
+      a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
+    toast(`Downloaded ${filename}`);
   });
   $("#tc-new-session").addEventListener("click", async () => {
     const name = prompt("Session name?", `Session ${new Date().toLocaleString()}`);
@@ -148,6 +154,7 @@ function renderInspector() {
   if (!step) { c.innerHTML = '<div class="tc-empty">Select a step</div>'; return; }
   const props = step.elementProps || {};
   const alts = step.selector?.alternatives || [];
+  const assertions = step.assertions || [];
   c.innerHTML = `
     <div class="row"><span class="k">type</span><span class="v">${esc(step.type)}</span></div>
     <div class="row"><span class="k">tag</span><span class="v">${esc(props.tagName || "—")}</span></div>
@@ -160,7 +167,56 @@ function renderInspector() {
     <div class="sel-list">
       <div class="tc-section-title" style="margin: 14px 0 8px">SELECTORS — PRIORITY ORDER</div>
       ${alts.map((a) => `<div class="sel"><span class="k">${esc(a.strategy)}</span><span class="v">${esc(a.value)}</span><span class="badge ${stabilityClass(a.strategy)}">${stabilityLabel(a.strategy)}</span></div>`).join("") || '<div class="tc-empty">No alternatives captured.</div>'}
+    </div>
+
+    <div class="sel-list">
+      <div class="tc-section-title" style="margin: 14px 0 8px; display:flex; justify-content:space-between; align-items:center">
+        <span>ASSERTIONS (${assertions.length})</span>
+        <button class="tc-btn" id="tc-add-assert-btn" data-testid="dash-add-assertion-btn" style="padding:4px 8px;font-size:9px">+ ADD</button>
+      </div>
+      <div id="tc-assert-list">
+        ${assertions.length ? assertions.map((a, i) => `
+          <div class="sel" style="grid-template-columns:100px 1fr 24px">
+            <span class="k">${esc(a.type)}</span>
+            <span class="v">${esc(a.expected ?? a.target ?? "—")}</span>
+            <button class="tc-btn tc-btn-ghost" data-remove-assert="${i}" title="Remove assertion" style="padding:2px 4px;font-size:10px">✕</button>
+          </div>`).join("") : '<div class="tc-empty">No assertions on this step. Add one via the button above or Shift+Click during recording.</div>'}
+      </div>
+      <button class="tc-btn" id="tc-delete-step-btn" data-testid="dash-delete-step-btn" style="margin-top:10px;width:100%">✕ DELETE STEP</button>
     </div>`;
+
+  // wire buttons
+  const addBtn = document.getElementById("tc-add-assert-btn");
+  if (addBtn) addBtn.addEventListener("click", onAddAssertion);
+  document.querySelectorAll("[data-remove-assert]").forEach((el) =>
+    el.addEventListener("click", async () => {
+      const idx = Number(el.getAttribute("data-remove-assert"));
+      await send({ type: "TC_REMOVE_ASSERTION", sessionId: s.id, stepId: step.id, index: idx });
+      await loadSession(state.currentId);
+    })
+  );
+  const delBtn = document.getElementById("tc-delete-step-btn");
+  if (delBtn) delBtn.addEventListener("click", async () => {
+    if (!confirm("Delete this step?")) return;
+    await send({ type: "TC_DELETE_STEP", sessionId: s.id, stepId: step.id });
+    await loadSession(state.currentId);
+  });
+}
+
+async function onAddAssertion() {
+  const s = state.currentSession;
+  const step = s?.steps?.find((x) => x.id === state.activeStepId);
+  if (!step) return;
+  const type = prompt(
+    "Assertion type?\n  containsText   — element text contains value\n  visible        — element is visible\n  exists         — element is attached\n  countEquals    — number of matches\n  valueEquals    — input value equals\n  urlContains    — current URL contains",
+    "containsText"
+  );
+  if (!type) return;
+  const expected = prompt("Expected value (leave blank for visible/exists):", step.value || "");
+  const assertion = { type: type.trim(), expected: expected || null, target: step.selector?.value || null };
+  await send({ type: "TC_ADD_ASSERTION", sessionId: s.id, stepId: step.id, assertion });
+  await loadSession(state.currentId);
+  toast("Assertion added");
 }
 
 function stabilityClass(s) { return ["data-testid", "aria-label"].includes(s) ? "high" : ["role", "id", "role+text"].includes(s) ? "medium" : "low"; }

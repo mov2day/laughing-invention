@@ -14,6 +14,7 @@ async function getState() {
   return out[STATE_KEY] || {
     recording: false,
     paused: false,
+    assertMode: false,
     activeSessionId: null,
     activeTabId: null,
     startTime: null,
@@ -154,6 +155,16 @@ async function appendStep(step) {
   broadcast({ type: "TC_STEP_ADDED", sessionId: session.id, step });
 }
 
+async function setAssertMode(on) {
+  const state = await setState({ assertMode: !!on });
+  if (state.activeTabId) {
+    try {
+      await chrome.tabs.sendMessage(state.activeTabId, { type: "TC_SET_ASSERT_MODE", assertMode: !!on });
+    } catch (_) {}
+  }
+  return state;
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     try {
@@ -198,6 +209,55 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           await setState({ framework: msg.framework });
           sendResponse({ ok: true });
           return;
+        case "TC_SET_ASSERT_MODE":
+          await setAssertMode(msg.assertMode);
+          sendResponse({ ok: true });
+          return;
+        case "TC_UPDATE_STEP": {
+          const session = await getSession(msg.sessionId);
+          if (session) {
+            const idx = session.steps.findIndex((s) => s.id === msg.step.id);
+            if (idx >= 0) session.steps[idx] = { ...session.steps[idx], ...msg.step };
+            await saveSession(session);
+          }
+          sendResponse({ ok: true });
+          return;
+        }
+        case "TC_DELETE_STEP": {
+          const session = await getSession(msg.sessionId);
+          if (session) {
+            session.steps = session.steps.filter((s) => s.id !== msg.stepId);
+            session.steps.forEach((s, i) => (s.stepNumber = i + 1));
+            await saveSession(session);
+          }
+          sendResponse({ ok: true });
+          return;
+        }
+        case "TC_ADD_ASSERTION": {
+          const session = await getSession(msg.sessionId);
+          if (session) {
+            const step = session.steps.find((s) => s.id === msg.stepId);
+            if (step) {
+              step.assertions = step.assertions || [];
+              step.assertions.push(msg.assertion);
+              await saveSession(session);
+            }
+          }
+          sendResponse({ ok: true });
+          return;
+        }
+        case "TC_REMOVE_ASSERTION": {
+          const session = await getSession(msg.sessionId);
+          if (session) {
+            const step = session.steps.find((s) => s.id === msg.stepId);
+            if (step && step.assertions) {
+              step.assertions = step.assertions.filter((_, i) => i !== msg.index);
+              await saveSession(session);
+            }
+          }
+          sendResponse({ ok: true });
+          return;
+        }
         case "TC_OPEN_DASHBOARD": {
           const url = chrome.runtime.getURL("dashboard.html") + (msg.sessionId ? `?session=${msg.sessionId}` : "");
           await chrome.tabs.create({ url });

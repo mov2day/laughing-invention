@@ -9,15 +9,20 @@
   window.__TC_CONTENT_INJECTED__ = true;
 
   let recording = false;
+  let assertMode = false;
   let lastTypeBuffer = { selector: null, value: "", stepId: null };
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === "TC_SET_RECORDING") {
       recording = !!msg.recording;
-      showIndicator(recording);
+      showIndicator();
+      sendResponse({ ok: true });
+    } else if (msg?.type === "TC_SET_ASSERT_MODE") {
+      assertMode = !!msg.assertMode;
+      showIndicator();
       sendResponse({ ok: true });
     } else if (msg?.type === "TC_PING") {
-      sendResponse({ ok: true, recording });
+      sendResponse({ ok: true, recording, assertMode });
     }
     return true;
   });
@@ -26,9 +31,10 @@
   try {
     chrome.runtime.sendMessage({ type: "TC_QUERY_STATE" }, (res) => {
       if (chrome.runtime.lastError) return;
-      if (res?.recording) {
-        recording = true;
-        showIndicator(true);
+      if (res?.state) {
+        recording = !!res.state.recording && !res.state.paused;
+        assertMode = !!res.state.assertMode;
+        showIndicator();
       }
     });
   } catch (_) {}
@@ -64,7 +70,7 @@
     if (!recording) return;
     const el = e.target;
     const selector = window.__TC_buildSelector(el);
-    const isAssertion = e.shiftKey;
+    const isAssertion = e.shiftKey || assertMode;
     const step = {
       id: crypto.randomUUID(),
       type: isAssertion ? "validate" : "click",
@@ -74,6 +80,7 @@
       timestamp: Date.now(),
       selector,
       value: isAssertion ? (el.innerText || "").trim().slice(0, 80) : undefined,
+      assertions: isAssertion ? [{ type: "containsText", expected: (el.innerText || "").trim().slice(0, 80) }] : [],
       elementProps: propsOf(el),
       url: location.href,
     };
@@ -166,28 +173,36 @@
   document.addEventListener("change", onChange, true);
 
   // Visual indicator
-  function showIndicator(on) {
+  function showIndicator() {
     let el = document.getElementById("__tc_indicator__");
+    const on = recording;
     if (on) {
       if (!el) {
         el = document.createElement("div");
         el.id = "__tc_indicator__";
-        el.textContent = "● REC";
         Object.assign(el.style, {
           position: "fixed",
           zIndex: 2147483647,
           right: "12px",
           bottom: "12px",
           padding: "6px 10px",
-          background: "rgba(239,68,68,0.95)",
           color: "#fff",
           font: "600 12px/1 ui-monospace, Menlo, monospace",
           borderRadius: "4px",
-          boxShadow: "0 6px 24px rgba(239,68,68,0.4)",
           pointerEvents: "none",
           letterSpacing: "0.08em",
+          transition: "background 160ms, box-shadow 160ms",
         });
         document.documentElement.appendChild(el);
+      }
+      if (assertMode) {
+        el.textContent = "◉ ASSERT";
+        el.style.background = "rgba(16,185,129,0.95)";
+        el.style.boxShadow = "0 6px 24px rgba(16,185,129,0.4)";
+      } else {
+        el.textContent = "● REC";
+        el.style.background = "rgba(239,68,68,0.95)";
+        el.style.boxShadow = "0 6px 24px rgba(239,68,68,0.4)";
       }
     } else if (el) {
       el.remove();

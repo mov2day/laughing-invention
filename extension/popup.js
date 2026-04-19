@@ -58,6 +58,13 @@ $("#tc-pause-btn").addEventListener("click", async () => {
   renderRecordingUI();
 });
 
+$("#tc-assert-mode").addEventListener("change", async (e) => {
+  const on = !!e.target.checked;
+  const box = e.target.closest(".tc-assert-toggle");
+  if (box) box.classList.toggle("is-on", on);
+  await send({ type: "TC_SET_ASSERT_MODE", assertMode: on });
+});
+
 $("#tc-framework").addEventListener("change", async (e) => {
   state.framework = e.target.value;
   await send({ type: "TC_SET_FRAMEWORK", framework: state.framework });
@@ -66,25 +73,49 @@ $("#tc-framework").addEventListener("change", async (e) => {
 });
 
 $("#tc-copy-btn").addEventListener("click", async () => {
+  setBusy("#tc-copy-btn", "…");
   const code = await generateCode();
+  restoreBtn("#tc-copy-btn", "COPY");
   if (!code) return;
-  await navigator.clipboard.writeText(code);
-  toast("Code copied");
+  try {
+    await navigator.clipboard.writeText(code);
+    toast("Code copied");
+  } catch (e) {
+    console.warn(e);
+    toast("Clipboard blocked");
+  }
 });
 $("#tc-export-btn").addEventListener("click", async () => {
+  setBusy("#tc-export-btn", "…");
   const code = await generateCode();
+  restoreBtn("#tc-export-btn", "EXPORT");
   if (!code) return;
   const ext = { playwright: "spec.ts", cypress: "cy.js", selenium: "py", karate: "feature" }[state.framework] || "txt";
+  const filename = `testcapture-${Date.now()}.${ext}`;
   const blob = new Blob([code], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
-  await chrome.downloads?.download?.({ url, filename: `testcapture.${ext}` }).catch(() => {
+  // Prefer chrome.downloads (reliable in popup context). Fall back to anchor click.
+  let downloaded = false;
+  try {
+    if (chrome.downloads?.download) {
+      await new Promise((resolve) => {
+        chrome.downloads.download({ url, filename, saveAs: false }, (id) => {
+          downloaded = !!id;
+          resolve();
+        });
+      });
+    }
+  } catch (e) { console.warn("chrome.downloads failed", e); }
+  if (!downloaded) {
+    // Fallback for when 'downloads' permission is unavailable
     const a = document.createElement("a");
-    a.href = url;
-    a.download = `testcapture.${ext}`;
+    a.href = url; a.download = filename; a.rel = "noopener";
+    document.body.appendChild(a);
     a.click();
-  });
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  toast("Exported");
+    a.remove();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast(`Exported ${filename}`);
 });
 $("#tc-open-dash-btn").addEventListener("click", async () => {
   await send({ type: "TC_OPEN_DASHBOARD", sessionId: state.sessionId });
@@ -117,6 +148,10 @@ chrome.runtime.onMessage.addListener((msg) => {
   state.sessionId = bg.activeSessionId;
   state.startTime = bg.startTime;
   state.framework = bg.framework || state.framework;
+  // Restore assert-mode UI
+  const assertOn = !!bg.assertMode;
+  $("#tc-assert-mode").checked = assertOn;
+  $("#tc-assert-mode").closest(".tc-assert-toggle")?.classList.toggle("is-on", assertOn);
   if (state.sessionId) await refreshSession();
   renderRecordingUI();
   if (state.recording) startTimer();
@@ -209,6 +244,21 @@ function send(msg) {
   return new Promise((resolve) => {
     try { chrome.runtime.sendMessage(msg, (r) => resolve(r)); } catch (_) { resolve(null); }
   });
+}
+
+const _btnOriginal = {};
+function setBusy(sel, label) {
+  const el = document.querySelector(sel);
+  if (!el) return;
+  _btnOriginal[sel] = el.textContent;
+  el.disabled = true;
+  el.textContent = label;
+}
+function restoreBtn(sel, fallback) {
+  const el = document.querySelector(sel);
+  if (!el) return;
+  el.disabled = false;
+  el.textContent = _btnOriginal[sel] || fallback;
 }
 
 function toast(txt) {

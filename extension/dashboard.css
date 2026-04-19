@@ -1,0 +1,100 @@
+/* TestCapture AI — Dashboard (Control Room) */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: #0A0A0A; color: #FAFAFA; font-family: Geist, Inter, -apple-system, "Segoe UI", Roboto, sans-serif; }
+body.tc-dash { display: grid; grid-template-columns: 260px 1fr; height: 100vh; overflow: hidden; }
+
+.tc-sidebar { border-right: 1px solid #27272A; padding: 16px; display: flex; flex-direction: column; min-height: 0; }
+.tc-sidebar-brand { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; }
+.tc-logo-lg { width: 32px; height: 32px; border-radius: 6px; background: linear-gradient(135deg, #FAFAFA 0%, #A1A1AA 100%); position: relative; }
+.tc-logo-lg::after{ content:""; position:absolute; inset:6px; border:1.5px solid #0A0A0A; border-radius:3px; }
+.tc-sidebar-name { font-weight: 700; letter-spacing: -0.02em; }
+.tc-sidebar-sub { font: 10px/1 "JetBrains Mono", monospace; color: #71717A; letter-spacing: 0.12em; margin-top: 3px; }
+
+.tc-section-title { font: 600 10px/1 "JetBrains Mono", monospace; color: #71717A; letter-spacing: 0.14em; margin-bottom: 8px; }
+.tc-session-list { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.tc-session-item {
+  border: 1px solid #27272A; border-radius: 4px; padding: 10px; cursor: pointer; background: #0F0F0F;
+  transition: border-color 120ms, background 120ms;
+}
+.tc-session-item:hover { border-color: #3F3F46; }
+.tc-session-item.active { border-color: #FAFAFA; }
+.tc-session-item .n { font-size: 13px; font-weight: 600; }
+.tc-session-item .m { font: 10px/1.4 "JetBrains Mono", monospace; color: #71717A; margin-top: 3px; }
+
+.tc-sidebar-footer { padding-top: 12px; border-top: 1px solid #27272A; margin-top: 12px; }
+
+.tc-main { display: grid; grid-template-rows: auto 1fr; min-height: 0; overflow: hidden; }
+
+.tc-topbar { border-bottom: 1px solid #27272A; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+.tc-topbar h1 { font-family: Outfit, Geist, sans-serif; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin: 4px 0 0; }
+.tc-micro { font: 600 10px/1 "JetBrains Mono", monospace; color: #71717A; letter-spacing: 0.14em; }
+.tc-micro-meta { font: 11px/1 "JetBrains Mono", monospace; color: #71717A; margin-top: 6px; }
+.tc-topbar-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+.tc-frame-tabs { display: inline-flex; border: 1px solid #27272A; border-radius: 4px; overflow: hidden; }
+.tc-frame-tab { border: 0; background: transparent; color: #A1A1AA; padding: 8px 12px; font: 600 11px/1 "JetBrains Mono", monospace; letter-spacing: 0.08em; cursor: pointer; border-right: 1px solid #27272A; }
+.tc-frame-tab:last-child { border-right: 0; }
+.tc-frame-tab:hover { color: #FAFAFA; background: #18181B; }
+.tc-frame-tab.active { background: #FAFAFA; color: #0A0A0A; }
+
+.tc-btn { appearance: none; cursor: pointer; border: 1px solid #27272A; background: transparent; color: #FAFAFA;
+  padding: 8px 12px; border-radius: 4px; font: 700 11px/1 "JetBrains Mono", monospace; letter-spacing: 0.12em; transition: background 120ms, border-color 120ms, color 120ms; }
+.tc-btn:hover { border-color: #3F3F46; background: #18181B; }
+.tc-btn-primary { background: #FAFAFA; color: #0A0A0A; border-color: #FAFAFA; }
+.tc-btn-primary:hover { background: #E4E4E7; border-color: #E4E4E7; }
+.tc-btn-secondary { color: #A1A1AA; }
+.tc-btn-ghost { border-color: transparent; color: #A1A1AA; }
+.tc-btn-ghost:hover { color: #FAFAFA; background: #18181B; border-color: transparent; }
+
+.tc-icon-btn { background: transparent; border: 1px solid #27272A; color: #A1A1AA; width: 28px; height: 28px; border-radius: 4px; cursor: pointer; }
+.tc-icon-btn:hover { color: #FAFAFA; border-color: #3F3F46; }
+
+.tc-cols { display: grid; grid-template-columns: 360px 1fr 320px; min-height: 0; overflow: hidden; }
+.tc-col { border-right: 1px solid #27272A; display: flex; flex-direction: column; min-height: 0; }
+.tc-col:last-child { border-right: 0; }
+.tc-col-head { padding: 10px 14px; border-bottom: 1px solid #27272A; display: flex; justify-content: space-between; align-items: center; font: 600 10px/1 "JetBrains Mono", monospace; letter-spacing: 0.14em; color: #71717A; }
+
+.tc-timeline { flex: 1; overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.tc-step-card {
+  border: 1px solid #27272A; border-left-width: 3px; border-radius: 4px; background: #0F0F0F;
+  padding: 10px 12px; cursor: pointer; display: grid; grid-template-columns: 32px 1fr auto; gap: 10px; align-items: center;
+}
+.tc-step-card:hover { border-color: #3F3F46; }
+.tc-step-card.active { border-color: #FAFAFA; background: #18181B; }
+.tc-step-card .num { font: 700 11px/1 "JetBrains Mono", monospace; color: #71717A; }
+.tc-step-card .lab { color: #E4E4E7; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-step-card .sel { font: 10px/1 "JetBrains Mono", monospace; color: #71717A; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-step-card .tag { font: 600 9px/1 "JetBrains Mono", monospace; color: #0A0A0A; background: #A1A1AA; padding: 3px 6px; border-radius: 2px; text-transform: uppercase; }
+.tc-step-card.click { border-left-color: #3B82F6; } .tc-step-card.click .tag { background: #3B82F6; color: #fff; }
+.tc-step-card.type { border-left-color: #A855F7; } .tc-step-card.type .tag { background: #A855F7; color: #fff; }
+.tc-step-card.navigate { border-left-color: #F59E0B; } .tc-step-card.navigate .tag { background: #F59E0B; color: #000; }
+.tc-step-card.validate { border-left-color: #10B981; } .tc-step-card.validate .tag { background: #10B981; color: #000; }
+.tc-step-card.select { border-left-color: #22D3EE; } .tc-step-card.select .tag { background: #22D3EE; color: #000; }
+
+.tc-code { flex: 1; margin: 0; padding: 14px 18px; overflow: auto; font: 12.5px/1.7 "JetBrains Mono", monospace; color: #E4E4E7; background: #0A0A0A; white-space: pre; }
+.tc-code .k { color: #A855F7; } .tc-code .s { color: #10B981; } .tc-code .c { color: #52525B; } .tc-code .fn { color: #3B82F6; } .tc-code .p { color: #F59E0B; }
+
+.tc-inspector { flex: 1; overflow: auto; padding: 14px; }
+.tc-inspector .row { display: grid; grid-template-columns: 80px 1fr; gap: 8px; font: 11px/1.6 "JetBrains Mono", monospace; padding: 5px 0; border-bottom: 1px dashed #27272A; }
+.tc-inspector .row .k { color: #71717A; text-transform: uppercase; letter-spacing: 0.1em; }
+.tc-inspector .row .v { color: #E4E4E7; word-break: break-all; }
+.tc-inspector .sel-list { margin-top: 12px; }
+.tc-inspector .sel-list .sel { display: grid; grid-template-columns: 100px 1fr 60px; gap: 8px; padding: 7px 8px; border: 1px solid #27272A; border-radius: 4px; margin-bottom: 4px; align-items: center; font: 11px/1.3 "JetBrains Mono", monospace; }
+.tc-inspector .sel .k { color: #A1A1AA; text-transform: uppercase; letter-spacing: 0.1em; font-size: 10px; }
+.tc-inspector .sel .v { color: #E4E4E7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-inspector .sel .badge { font-size: 9px; text-align: center; padding: 3px 6px; border-radius: 2px; font-weight: 700; letter-spacing: 0.1em; }
+.tc-inspector .sel .badge.high { background: #10B981; color: #000; }
+.tc-inspector .sel .badge.medium { background: #F59E0B; color: #000; }
+.tc-inspector .sel .badge.low { background: #EF4444; color: #fff; }
+
+.tc-empty { color: #52525B; text-align: center; padding: 36px 14px; font-size: 12px; }
+
+.tc-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.72); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.tc-modal-body { width: 420px; background: #121212; border: 1px solid #27272A; border-radius: 6px; padding: 16px; display: grid; gap: 12px; }
+.tc-modal-head { display: flex; justify-content: space-between; align-items: center; font: 600 11px/1 "JetBrains Mono", monospace; color: #A1A1AA; letter-spacing: 0.14em; }
+.tc-field { display: flex; flex-direction: column; gap: 4px; }
+.tc-field > span { font: 600 10px/1 "JetBrains Mono", monospace; letter-spacing: 0.12em; color: #71717A; }
+.tc-field input, .tc-field select { background: transparent; border: 1px solid #27272A; color: #FAFAFA; padding: 8px 10px; border-radius: 4px; font: 12px "JetBrains Mono", monospace; outline: none; }
+.tc-field input:focus, .tc-field select:focus { border-color: #71717A; }
+
+.tc-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #18181B; border: 1px solid #27272A; color: #FAFAFA; padding: 8px 14px; border-radius: 4px; font: 11px/1 "JetBrains Mono", monospace; letter-spacing: 0.08em; z-index: 60; }

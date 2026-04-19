@@ -2,114 +2,134 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Geist:wght@400;500;600;700&display=swap');
+
+:root {
+  color-scheme: dark;
+  --bg: #0A0A0A;
+  --surface: #121212;
+  --elev: #18181B;
+  --border: #27272A;
+  --border-hover: #3F3F46;
+  --text: #FAFAFA;
+  --text-2: #A1A1AA;
+  --text-3: #71717A;
+  --text-4: #52525B;
+  --brand: #FFFFFF;
+  --rec: #EF4444;
+  --blue: #3B82F6;
+  --green: #10B981;
+  --amber: #F59E0B;
+  --purple: #A855F7;
+  --cyan: #22D3EE;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
 body {
-    margin: 0;
-    font-family:
-        -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
-        "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-        sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Geist", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
-code {
-    font-family:
-        source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+::selection { background: #FAFAFA; color: #0A0A0A; }
+
+.font-mono { font-family: "JetBrains Mono", ui-monospace, Menlo, Monaco, monospace; }
+.font-display { font-family: "Outfit", Geist, sans-serif; letter-spacing: -0.02em; }
+
+/* Custom scrollbars */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: #27272A; border-radius: 4px; }
+*::-webkit-scrollbar-thumb:hover { background: #3F3F46; }
+
+/* Buttons — base */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid var(--border); background: transparent; color: var(--text);
+  padding: 10px 14px; border-radius: 4px;
+  font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 11px; letter-spacing: 0.14em;
+  cursor: pointer; transition: background 120ms, color 120ms, border-color 120ms, transform 120ms;
+  text-transform: uppercase; text-decoration: none;
+}
+.btn:hover { border-color: var(--border-hover); background: var(--elev); }
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--brand); color: #0A0A0A; border-color: var(--brand); }
+.btn-primary:hover { background: #E4E4E7; border-color: #E4E4E7; }
+.btn-ghost { border-color: transparent; color: var(--text-2); }
+.btn-ghost:hover { color: var(--text); background: var(--elev); border-color: transparent; }
+.btn-sm { padding: 7px 10px; font-size: 10px; }
+.btn-record { background: var(--rec); color: #fff; border-color: var(--rec); }
+.btn-record:hover { background: #DC2626; border-color: #DC2626; }
+.btn-record.is-on { background: transparent; color: var(--rec); animation: rec-pulse 1.8s ease-in-out infinite; }
+@keyframes rec-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+  50%     { box-shadow: 0 0 0 8px rgba(239,68,68,0.18); }
 }
 
-@layer base {
-    :root {
-        --background: 0 0% 100%;
-        --foreground: 0 0% 3.9%;
-        --card: 0 0% 100%;
-        --card-foreground: 0 0% 3.9%;
-        --popover: 0 0% 100%;
-        --popover-foreground: 0 0% 3.9%;
-        --primary: 0 0% 9%;
-        --primary-foreground: 0 0% 98%;
-        --secondary: 0 0% 96.1%;
-        --secondary-foreground: 0 0% 9%;
-        --muted: 0 0% 96.1%;
-        --muted-foreground: 0 0% 45.1%;
-        --accent: 0 0% 96.1%;
-        --accent-foreground: 0 0% 9%;
-        --destructive: 0 84.2% 60.2%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 89.8%;
-        --input: 0 0% 89.8%;
-        --ring: 0 0% 3.9%;
-        --chart-1: 12 76% 61%;
-        --chart-2: 173 58% 39%;
-        --chart-3: 197 37% 24%;
-        --chart-4: 43 74% 66%;
-        --chart-5: 27 87% 67%;
-        --radius: 0.5rem;
-    }
-    .dark {
-        --background: 0 0% 3.9%;
-        --foreground: 0 0% 98%;
-        --card: 0 0% 3.9%;
-        --card-foreground: 0 0% 98%;
-        --popover: 0 0% 3.9%;
-        --popover-foreground: 0 0% 98%;
-        --primary: 0 0% 98%;
-        --primary-foreground: 0 0% 9%;
-        --secondary: 0 0% 14.9%;
-        --secondary-foreground: 0 0% 98%;
-        --muted: 0 0% 14.9%;
-        --muted-foreground: 0 0% 63.9%;
-        --accent: 0 0% 14.9%;
-        --accent-foreground: 0 0% 98%;
-        --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 14.9%;
-        --input: 0 0% 14.9%;
-        --ring: 0 0% 83.1%;
-        --chart-1: 220 70% 50%;
-        --chart-2: 160 60% 45%;
-        --chart-3: 30 80% 55%;
-        --chart-4: 280 65% 60%;
-        --chart-5: 340 75% 55%;
-    }
+/* Inputs */
+.input, select.input, textarea.input {
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 9px 11px; font: 12px/1.4 "JetBrains Mono", monospace;
+  outline: none; transition: border-color 120ms;
+  width: 100%;
+}
+.input:focus, select.input:focus { border-color: var(--text-3); }
+
+.label { font: 600 10px/1 "JetBrains Mono", monospace; color: var(--text-3); letter-spacing: 0.14em; text-transform: uppercase; }
+
+/* Micro */
+.micro { font: 600 10px/1 "JetBrains Mono", monospace; color: var(--text-3); letter-spacing: 0.14em; text-transform: uppercase; }
+
+/* Subtle grid overlay */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(63,63,70,0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(63,63,70,0.12) 1px, transparent 1px);
+  background-size: 44px 44px;
 }
 
-@layer base {
-    * {
-        @apply border-border;
-    }
-    body {
-        @apply bg-background text-foreground;
-    }
+.gradient-fade-bottom {
+  background: linear-gradient(180deg, transparent 0%, rgba(10,10,10,0.5) 60%, #0A0A0A 100%);
 }
 
-@layer base {
-    [data-debug-wrapper="true"] {
-        display: contents !important;
-    }
-
-    [data-debug-wrapper="true"] > * {
-        margin-left: inherit;
-        margin-right: inherit;
-        margin-top: inherit;
-        margin-bottom: inherit;
-        padding-left: inherit;
-        padding-right: inherit;
-        padding-top: inherit;
-        padding-bottom: inherit;
-        column-gap: inherit;
-        row-gap: inherit;
-        gap: inherit;
-        border-left-width: inherit;
-        border-right-width: inherit;
-        border-top-width: inherit;
-        border-bottom-width: inherit;
-        border-left-style: inherit;
-        border-right-style: inherit;
-        border-top-style: inherit;
-        border-bottom-style: inherit;
-        border-left-color: inherit;
-        border-right-color: inherit;
-        border-top-color: inherit;
-        border-bottom-color: inherit;
-    }
+.step-dot {
+  width: 8px; height: 8px; border-radius: 50%; display: inline-block;
 }
+.step-dot.click { background: var(--blue); }
+.step-dot.type { background: var(--purple); }
+.step-dot.navigate { background: var(--amber); }
+.step-dot.validate { background: var(--green); }
+.step-dot.select { background: var(--cyan); }
+
+.stability-high { background: var(--green); color: #000; }
+.stability-medium { background: var(--amber); color: #000; }
+.stability-low { background: var(--rec); color: #fff; }
+
+.tracing-border {
+  position: relative; overflow: hidden;
+}
+.tracing-border::before {
+  content: ""; position: absolute; inset: -1px; pointer-events: none;
+  background: conic-gradient(from var(--angle,0deg), transparent 0, transparent 60%, rgba(250,250,250,0.18) 70%, transparent 85%);
+  border-radius: inherit;
+  opacity: 0; transition: opacity 180ms;
+}
+.tracing-border:hover::before { opacity: 1; animation: trace 4s linear infinite; }
+@property --angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+@keyframes trace { to { --angle: 360deg; } }
+
+/* code highlight (prism-react-renderer container) */
+.code-wrap { background: #0A0A0A; padding: 16px 18px; font: 12.5px/1.7 "JetBrains Mono", monospace; overflow: auto; margin: 0; }
+
+/* Action card left bars */
+.bar-click { border-left: 3px solid var(--blue); }
+.bar-type { border-left: 3px solid var(--purple); }
+.bar-navigate { border-left: 3px solid var(--amber); }
+.bar-validate { border-left: 3px solid var(--green); }
+.bar-select { border-left: 3px solid var(--cyan); }

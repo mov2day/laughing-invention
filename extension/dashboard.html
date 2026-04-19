@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TestCapture AI — Dashboard</title>
+    <link rel="stylesheet" href="dashboard.css" />
+  </head>
+  <body class="tc-dash">
+    <aside class="tc-sidebar">
+      <div class="tc-sidebar-brand">
+        <div class="tc-logo-lg"></div>
+        <div>
+          <div class="tc-sidebar-name">TestCapture AI</div>
+          <div class="tc-sidebar-sub">Dashboard</div>
+        </div>
+      </div>
+      <button class="tc-btn tc-btn-primary" id="tc-new-session" data-testid="dash-new-session">+ NEW SESSION</button>
+      <div class="tc-section-title" style="margin-top:16px">HISTORY</div>
+      <div class="tc-session-list" id="tc-session-list"></div>
+      <div class="tc-sidebar-footer">
+        <button class="tc-btn tc-btn-ghost" id="tc-settings-open" data-testid="dash-settings-btn">⚙  SETTINGS</button>
+      </div>
+    </aside>
+
+    <main class="tc-main">
+      <header class="tc-topbar">
+        <div>
+          <div class="tc-micro">SESSION</div>
+          <h1 id="tc-session-name" data-testid="dash-session-name">Select or start a session</h1>
+          <div class="tc-micro-meta"><span id="tc-session-origin">—</span> · <span id="tc-session-status">idle</span> · <span id="tc-session-steps-count">0</span> steps</div>
+        </div>
+        <div class="tc-topbar-actions">
+          <div class="tc-frame-tabs" id="tc-frame-tabs">
+            <button class="tc-frame-tab active" data-framework="playwright">Playwright</button>
+            <button class="tc-frame-tab" data-framework="cypress">Cypress</button>
+            <button class="tc-frame-tab" data-framework="selenium">Selenium</button>
+            <button class="tc-frame-tab" data-framework="karate">Karate</button>
+          </div>
+          <button class="tc-btn tc-btn-secondary" id="tc-regen-btn" data-testid="dash-regen-btn">⟳ REGENERATE</button>
+          <button class="tc-btn tc-btn-primary" id="tc-copy-code-btn" data-testid="dash-copy-code-btn">COPY</button>
+          <button class="tc-btn tc-btn-secondary" id="tc-download-btn" data-testid="dash-download-btn">DOWNLOAD</button>
+        </div>
+      </header>
+
+      <div class="tc-cols">
+        <section class="tc-col tc-timeline-col">
+          <div class="tc-col-head"><span>ACTION TIMELINE</span></div>
+          <div class="tc-timeline" id="tc-timeline"></div>
+        </section>
+
+        <section class="tc-col tc-code-col">
+          <div class="tc-col-head"><span>GENERATED CODE</span><span class="tc-micro" id="tc-code-meta"></span></div>
+          <pre class="tc-code" id="tc-code"></pre>
+        </section>
+
+        <section class="tc-col tc-inspector-col">
+          <div class="tc-col-head"><span>ELEMENT INSPECTOR</span></div>
+          <div class="tc-inspector" id="tc-inspector">
+            <div class="tc-empty">Select a step to inspect its element.</div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div class="tc-modal" id="tc-settings-modal" hidden>
+      <div class="tc-modal-body">
+        <div class="tc-modal-head">
+          <span>SETTINGS</span>
+          <button class="tc-icon-btn" id="tc-settings-close">✕</button>
+        </div>
+        <label class="tc-field">
+          <span>ANTHROPIC API KEY</span>
+          <input type="password" id="tc-dash-api-key" placeholder="sk-ant-..." data-testid="dash-api-key-input"/>
+        </label>
+        <label class="tc-field">
+          <span>MODEL</span>
+          <select id="tc-dash-model" data-testid="dash-model-select">
+            <option value="claude-sonnet-4-5-20250929">claude-sonnet-4-5</option>
+            <option value="claude-opus-4-5-20251101">claude-opus-4-5</option>
+            <option value="claude-haiku-4-5-20251001">claude-haiku-4-5</option>
+          </select>
+        </label>
+        <label class="tc-field">
+          <span>PROXY URL (FastAPI backend, e.g. https://your-backend/api)</span>
+          <input type="text" id="tc-dash-proxy" placeholder="https://..."  data-testid="dash-proxy-input"/>
+        </label>
+        <button class="tc-btn tc-btn-primary" id="tc-dash-settings-save" data-testid="dash-settings-save">SAVE</button>
+      </div>
+    </div>
+
+    <div class="tc-toast" id="tc-toast" hidden></div>
+    <script src="dashboard.js" type="module"></script>
+  </body>
+</html>

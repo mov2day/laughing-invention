@@ -62,3 +62,14 @@ User uploaded `TestCaptureAI_Technical_Design_v4.docx` and asked for a complete,
 - **SDET / QA engineer** — primary user; wants clean, committable code, no vendor runner
 - **Full-stack dev** — basic PR coverage without boilerplate
 - **Engineering manager** — cares about selector stability and script maintainability
+
+### 2026-01-19 · Iteration 3 (granular assertion control)
+- [x] **PICK MODE** — in-page Shadow-DOM-isolated assertion picker (`/app/extension/lib/picker.js`) that opens on click during recording. User chooses assertion type (6 options), tunes the expected value (smart defaults per type), and overrides the selector strategy from a radio-list of priority-ranked alternatives.
+- [x] **Alt+Click** shortcut — opens the picker for one click without toggling mode.
+- [x] Mutual exclusivity between **ASSERT MODE** (instant) and **PICK MODE** (picker) in background state machine.
+- [x] New popup UI — two toggles (green ASSERT MODE + blue PICK ASSERTION) + a kbd shortcut hint row. Popup height bumped to 640px to accommodate.
+- [x] Re-inject content script and replay mode state on navigation so picker survives SPAs.
+- [x] Live web sandbox on `/popup` so visitors can try the picker flow without installing.
+- [x] Landing page feature tile "Granular assertion control" replaces old Shift+Click tile.
+- [x] 18/18 backend regression, all frontend flows verified.
+

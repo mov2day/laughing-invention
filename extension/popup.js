@@ -62,7 +62,23 @@ $("#tc-assert-mode").addEventListener("change", async (e) => {
   const on = !!e.target.checked;
   const box = e.target.closest(".tc-assert-toggle");
   if (box) box.classList.toggle("is-on", on);
+  if (on) {
+    // mutually exclusive with pick mode
+    $("#tc-pick-mode").checked = false;
+    $("#tc-pick-mode").closest(".tc-pick-toggle")?.classList.remove("is-on");
+  }
   await send({ type: "TC_SET_ASSERT_MODE", assertMode: on });
+});
+
+$("#tc-pick-mode").addEventListener("change", async (e) => {
+  const on = !!e.target.checked;
+  const box = e.target.closest(".tc-pick-toggle");
+  if (box) box.classList.toggle("is-on", on);
+  if (on) {
+    $("#tc-assert-mode").checked = false;
+    $("#tc-assert-mode").closest(".tc-assert-toggle")?.classList.remove("is-on");
+  }
+  await send({ type: "TC_SET_PICK_MODE", pickMode: on });
 });
 
 $("#tc-framework").addEventListener("change", async (e) => {
@@ -148,10 +164,13 @@ chrome.runtime.onMessage.addListener((msg) => {
   state.sessionId = bg.activeSessionId;
   state.startTime = bg.startTime;
   state.framework = bg.framework || state.framework;
-  // Restore assert-mode UI
+  // Restore assert-mode / pick-mode UI
   const assertOn = !!bg.assertMode;
   $("#tc-assert-mode").checked = assertOn;
   $("#tc-assert-mode").closest(".tc-assert-toggle")?.classList.toggle("is-on", assertOn);
+  const pickOn = !!bg.pickMode;
+  $("#tc-pick-mode").checked = pickOn;
+  $("#tc-pick-mode").closest(".tc-pick-toggle")?.classList.toggle("is-on", pickOn);
   if (state.sessionId) await refreshSession();
   renderRecordingUI();
   if (state.recording) startTimer();

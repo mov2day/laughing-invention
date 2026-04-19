@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import axios from "axios";
-import { Settings as SettingsIcon, Copy, Download } from "lucide-react";
+import { Settings as SettingsIcon, Copy, Download, X } from "lucide-react";
 import { demoSession } from "@/data/demoSession";
 import { offlineGenerate } from "@/lib/generate";
 import { useSettings } from "@/context/SettingsContext";
 import SettingsModal from "@/components/SettingsModal";
+import AddAssertionModal from "@/components/AddAssertionModal";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -15,13 +16,18 @@ export default function PopupPreview() {
   const { settings, setSettings } = useSettings();
   const [recording, setRecording] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [mode, setMode] = useState("normal"); // normal | assert | pick
   const [testName, setTestName] = useState("Login and create a Todo");
   const [framework, setFramework] = useState(settings.framework || "playwright");
-  const [stepIndex, setStepIndex] = useState(0); // how far into demo we've simulated
+  const [stepIndex, setStepIndex] = useState(0);
   const [startTime, setStartTime] = useState(null);
   const [tick, setTick] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toast, setToast] = useState(null);
+  // Picker sandbox state
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickTarget, setPickTarget] = useState(null);
+  const [capturedAssertions, setCapturedAssertions] = useState([]);
 
   const steps = demoSession.steps.slice(0, stepIndex);
 
@@ -100,14 +106,14 @@ export default function PopupPreview() {
               <div
                 className="relative"
                 style={{
-                  width: 380, height: 560, background: "#0A0A0A",
+                  width: 380, height: 640, background: "#0A0A0A",
                   border: "1px solid #27272A", borderRadius: 12,
                   boxShadow: "0 30px 80px -20px rgba(0,0,0,0.8), 0 0 0 1px rgba(250,250,250,0.04)",
                   overflow: "hidden", display: "flex", flexDirection: "column",
                 }}
               >
                 {/* fake chrome dots */}
-                <div className="absolute top-2 right-2 font-mono text-[9px] text-zinc-600 uppercase tracking-[0.14em]">POPUP · 380×560</div>
+                <div className="absolute top-2 right-2 font-mono text-[9px] text-zinc-600 uppercase tracking-[0.14em]">POPUP · 380×640</div>
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-3 py-2.5 border-b border-zinc-800">
@@ -159,6 +165,41 @@ export default function PopupPreview() {
                     >
                       {paused ? "RESUME" : "PAUSE"}
                     </button>
+                  </div>
+
+                  {/* Mode toggles (granular assertion control) */}
+                  <div className="mt-2.5 space-y-1.5">
+                    <button
+                      onClick={() => setMode((m) => (m === "assert" ? "normal" : "assert"))}
+                      className={`w-full flex items-center gap-2 px-2.5 py-1.5 border rounded text-left transition-colors ${mode === "assert" ? "border-emerald-500 bg-emerald-500/10" : "border-zinc-800 hover:border-zinc-700"}`}
+                      data-testid="popup-assert-toggle"
+                    >
+                      <span className="inline-block w-7 h-4 rounded-full relative" style={{ background: mode === "assert" ? "#10B981" : "#27272A" }}>
+                        <span className="absolute top-0.5 w-3 h-3 rounded-full transition-all" style={{ left: mode === "assert" ? "14px" : "2px", background: mode === "assert" ? "#fff" : "#A1A1AA" }} />
+                      </span>
+                      <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-zinc-200 flex items-center gap-1.5">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" /> ASSERT MODE
+                      </span>
+                      <span className="ml-auto font-mono text-[9px] text-zinc-500">click = validate</span>
+                    </button>
+                    <button
+                      onClick={() => setMode((m) => (m === "pick" ? "normal" : "pick"))}
+                      className={`w-full flex items-center gap-2 px-2.5 py-1.5 border rounded text-left transition-colors ${mode === "pick" ? "border-blue-500 bg-blue-500/10" : "border-zinc-800 hover:border-zinc-700"}`}
+                      data-testid="popup-pick-toggle"
+                    >
+                      <span className="inline-block w-7 h-4 rounded-full relative" style={{ background: mode === "pick" ? "#3B82F6" : "#27272A" }}>
+                        <span className="absolute top-0.5 w-3 h-3 rounded-full transition-all" style={{ left: mode === "pick" ? "14px" : "2px", background: mode === "pick" ? "#fff" : "#A1A1AA" }} />
+                      </span>
+                      <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-zinc-200 flex items-center gap-1.5">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" /> PICK ASSERTION
+                      </span>
+                      <span className="ml-auto font-mono text-[9px] text-zinc-500">click → picker</span>
+                    </button>
+                    <div className="font-mono text-[9px] text-zinc-500 text-center mt-1.5 tracking-[0.04em]">
+                      <kbd className="border border-zinc-800 rounded px-1 py-0.5 text-[9px]">Shift</kbd>+<kbd className="border border-zinc-800 rounded px-1 py-0.5 text-[9px]">Click</kbd> quick
+                      <span className="mx-1">·</span>
+                      <kbd className="border border-zinc-800 rounded px-1 py-0.5 text-[9px]">Alt</kbd>+<kbd className="border border-zinc-800 rounded px-1 py-0.5 text-[9px]">Click</kbd> picker
+                    </div>
                   </div>
                 </div>
 
@@ -237,11 +278,118 @@ export default function PopupPreview() {
               <a href="/dashboard" className="btn">Open the full dashboard →</a>
               <a href="/testcapture-extension.zip" download className="btn btn-primary"><Download size={14}/> Install extension</a>
             </div>
+
+            {/* Interactive picker sandbox */}
+            <div className="mt-10 border border-zinc-800 rounded p-5 bg-[#0F0F0F]">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <div className="micro text-zinc-500">LIVE SANDBOX</div>
+                  <div className="font-display text-lg font-semibold tracking-tight mt-1">Try the picker on these elements</div>
+                </div>
+                <button onClick={() => setMode("pick")} className={`btn btn-sm ${mode === "pick" ? "btn-primary" : ""}`} data-testid="sandbox-pick-mode-btn">
+                  {mode === "pick" ? "PICK MODE ON" : "TURN ON PICK MODE"}
+                </button>
+              </div>
+              <p className="text-[12px] text-zinc-500 leading-relaxed mb-4">
+                With <span className="text-white">PICK MODE</span> active, click any element below to open the granular assertion picker — choose a type,
+                tune the expected value, pick the selector strategy, and save. Or hold <kbd className="border border-zinc-700 rounded px-1 py-0.5 text-[10px]">Alt</kbd> and click.
+              </p>
+              <SandboxPage
+                pickMode={mode === "pick"}
+                onPick={(el) => { setPickTarget(el); setPickerOpen(true); }}
+                onAltClick={(el) => { setPickTarget(el); setPickerOpen(true); }}
+              />
+              {capturedAssertions.length > 0 && (
+                <div className="mt-4 space-y-1" data-testid="sandbox-captured-list">
+                  <div className="micro text-zinc-500 mb-2">CAPTURED ({capturedAssertions.length})</div>
+                  {capturedAssertions.map((a, i) => (
+                    <div key={i} className="grid grid-cols-[90px_1fr_24px] gap-2 items-center border border-emerald-500/30 bg-emerald-500/5 rounded px-2 py-2 font-mono text-[11px]">
+                      <span className="text-emerald-400 uppercase tracking-[0.1em] text-[10px]">{a.type}</span>
+                      <span className="text-zinc-200 truncate">{a.expected ?? a.target ?? "—"}</span>
+                      <button onClick={() => setCapturedAssertions((xs) => xs.filter((_, j) => j !== i))} className="text-zinc-500 hover:text-red-400"><X size={12}/></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <AddAssertionModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        defaultExpected={pickTarget?.text || pickTarget?.value || ""}
+        onAdd={(assertion) => {
+          setCapturedAssertions((xs) => [...xs, { ...assertion, target: pickTarget?.label }]);
+          setPickerOpen(false);
+          showToast(`Assertion captured on ${pickTarget?.label}`);
+        }}
+      />
+    </div>
+  );
+}
+
+function SandboxPage({ pickMode, onPick, onAltClick }) {
+  const handle = (e, meta) => {
+    if (!pickMode && !e.altKey) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.altKey) onAltClick(meta);
+    else onPick(meta);
+  };
+  const dim = pickMode ? "cursor-crosshair" : "";
+  const outline = pickMode ? "hover:outline hover:outline-2 hover:outline-emerald-500 hover:outline-offset-2" : "";
+  return (
+    <div className={`border border-dashed border-zinc-800 rounded p-4 bg-[#0A0A0A] ${dim}`} data-testid="sandbox-page">
+      <div className="flex items-center gap-2 mb-3 pb-3 border-b border-zinc-800">
+        <span className="font-mono text-[10px] text-zinc-500">demo.todoapp.com/app</span>
+        <span className="ml-auto font-mono text-[10px] text-emerald-500">{pickMode ? "● PICK MODE" : ""}</span>
+      </div>
+      <h3
+        onClick={(e) => handle(e, { label: "h1:Welcome back", text: "Welcome back, demo@testcapture.ai", tagName: "H1" })}
+        className={`text-xl font-display font-semibold mb-3 ${outline}`}
+        data-testid="sandbox-heading"
+      >Welcome back, demo@testcapture.ai</h3>
+      <p
+        onClick={(e) => handle(e, { label: "p:tagline", text: "You have 3 todos due today.", tagName: "P" })}
+        className={`text-zinc-400 text-sm mb-4 ${outline}`}
+        data-testid="sandbox-tagline"
+      >You have 3 todos due today.</p>
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={(e) => handle(e, { label: "button:new-todo-btn", text: "+ Add Todo", tagName: "BUTTON" })}
+          className={`btn btn-primary btn-sm ${outline}`}
+          data-testid="sandbox-add-btn"
+        >+ Add Todo</button>
+        <button
+          onClick={(e) => handle(e, { label: "button:save-todo", text: "Save", tagName: "BUTTON" })}
+          className={`btn btn-sm ${outline}`}
+          data-testid="sandbox-save-btn"
+        >Save</button>
+      </div>
+      <input
+        onClick={(e) => handle(e, { label: "input:todo-input", text: "", value: "Finish TestCapture review", tagName: "INPUT" })}
+        readOnly
+        defaultValue="Finish TestCapture review"
+        className={`input mb-3 ${outline}`}
+        data-testid="sandbox-input"
+      />
+      <ul className="border border-zinc-800 rounded divide-y divide-zinc-800">
+        {["Write tests for login", "Refactor the dashboard", "Ship TestCapture v1"].map((t, i) => (
+          <li key={i}
+            onClick={(e) => handle(e, { label: `li:todo-${i}`, text: t, tagName: "LI" })}
+            className={`px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-900 ${outline}`}
+            data-testid={`sandbox-todo-${i}`}
+          >{t}</li>
+        ))}
+      </ul>
+      {!pickMode && (
+        <div className="mt-3 text-[11px] text-zinc-500 text-center">
+          Tip: Turn on <span className="text-white">PICK MODE</span>, or hold <kbd className="border border-zinc-700 rounded px-1 py-0.5 text-[10px]">Alt</kbd> + click any element above.
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,11 @@
 /*
  * TestCapture AI — Content Script
  * Captures user interactions on the page under test and forwards them to the background
- * service worker. Supports Shift+Click to create an assertion instead of a click step.
+ * service worker. Three assertion modes:
+ *   (1) Shift+Click — instant containsText assertion
+ *   (2) Assert Mode — all clicks become containsText assertions
+ *   (3) Pick Mode   — clicks open an in-page picker where user chooses assertion TYPE, value, selector
+ *   (*) Alt+Click — opens the picker for ONE click without toggling mode
  */
 (function () {
   "use strict";
@@ -10,19 +14,29 @@
 
   let recording = false;
   let assertMode = false;
+  let pickMode = false;
   let lastTypeBuffer = { selector: null, value: "", stepId: null };
+  let hoverEl = null;
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === "TC_SET_RECORDING") {
       recording = !!msg.recording;
+      if (!recording) { window.__TC_closePicker?.(); clearHover(); }
       showIndicator();
       sendResponse({ ok: true });
     } else if (msg?.type === "TC_SET_ASSERT_MODE") {
       assertMode = !!msg.assertMode;
+      if (assertMode) pickMode = false;
+      showIndicator();
+      sendResponse({ ok: true });
+    } else if (msg?.type === "TC_SET_PICK_MODE") {
+      pickMode = !!msg.pickMode;
+      if (pickMode) assertMode = false;
+      if (!pickMode) { window.__TC_closePicker?.(); clearHover(); }
       showIndicator();
       sendResponse({ ok: true });
     } else if (msg?.type === "TC_PING") {
-      sendResponse({ ok: true, recording, assertMode });
+      sendResponse({ ok: true, recording, assertMode, pickMode });
     }
     return true;
   });
@@ -34,6 +48,7 @@
       if (res?.state) {
         recording = !!res.state.recording && !res.state.paused;
         assertMode = !!res.state.assertMode;
+        pickMode = !!res.state.pickMode;
         showIndicator();
       }
     });
@@ -66,10 +81,48 @@
     };
   }
 
+  function isInsidePicker(target) {
+    if (!target) return false;
+    let n = target;
+    while (n) {
+      if (n.id === "__tc_picker_host__") return true;
+      n = n.parentNode || n.host || null;
+    }
+    return false;
+  }
+
   function onClick(e) {
     if (!recording) return;
+    if (isInsidePicker(e.target)) return;
+
     const el = e.target;
     const selector = window.__TC_buildSelector(el);
+
+    // Pick mode OR Alt+Click → open typed picker
+    if (pickMode || e.altKey) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      window.__TC_openPicker?.(el, selector, {
+        onSave: ({ assertion, selector: chosenSel }) => {
+          flushTypeBuffer();
+          send({
+            id: crypto.randomUUID(),
+            type: "validate",
+            label: labelForAssertion(assertion, chosenSel),
+            timestamp: Date.now(),
+            selector: chosenSel,
+            value: assertion.expected ?? null,
+            assertions: [assertion],
+            elementProps: propsOf(el),
+            url: location.href,
+          });
+        },
+        onCancel: () => {},
+      });
+      return;
+    }
+
+    // Shift+Click OR Assert Mode → instant containsText assertion
     const isAssertion = e.shiftKey || assertMode;
     const step = {
       id: crypto.randomUUID(),
@@ -88,13 +141,26 @@
     send(step);
   }
 
+  function labelForAssertion(a, sel) {
+    const where = `${sel.strategy}:${String(sel.value).slice(0, 40)}`;
+    switch (a.type) {
+      case "containsText": return `Assert ${where} contains "${String(a.expected).slice(0, 40)}"`;
+      case "visible": return `Assert ${where} is visible`;
+      case "exists": return `Assert ${where} exists`;
+      case "valueEquals": return `Assert ${where}.value = "${String(a.expected).slice(0, 30)}"`;
+      case "countEquals": return `Assert count(${where}) = ${a.expected}`;
+      case "urlContains": return `Assert URL contains "${String(a.expected).slice(0, 40)}"`;
+      default: return `Assert ${a.type}`;
+    }
+  }
+
   function onInput(e) {
     if (!recording) return;
     const el = e.target;
     if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement)) return;
+    if (isInsidePicker(el)) return;
     const selector = window.__TC_buildSelector(el);
     const value = redactIfPassword(el, el.value || "");
-    // Coalesce rapid keystrokes into one 'type' step for the same element
     if (lastTypeBuffer.stepId && lastTypeBuffer.selector === selector.value) {
       lastTypeBuffer.value = value;
       send({
@@ -127,6 +193,7 @@
   function onChange(e) {
     if (!recording) return;
     const el = e.target;
+    if (isInsidePicker(el)) return;
     if (el instanceof HTMLSelectElement) {
       const selector = window.__TC_buildSelector(el);
       flushTypeBuffer();
@@ -141,6 +208,38 @@
         url: location.href,
       });
     }
+  }
+
+  function onMouseMove(e) {
+    if (!recording || !pickMode) return;
+    if (isInsidePicker(e.target)) return;
+    const el = e.target;
+    if (el === hoverEl) return;
+    clearHover();
+    if (!el || el.nodeType !== 1) return;
+    hoverEl = el;
+    el.setAttribute?.("data-__tc-hover__", "1");
+    ensureHoverStyle();
+  }
+
+  function clearHover() {
+    if (hoverEl && hoverEl.removeAttribute) hoverEl.removeAttribute("data-__tc-hover__");
+    hoverEl = null;
+  }
+
+  function ensureHoverStyle() {
+    if (document.getElementById("__tc_hover_style__")) return;
+    const s = document.createElement("style");
+    s.id = "__tc_hover_style__";
+    s.textContent = `
+      [data-__tc-hover__] {
+        outline: 2px solid #10B981 !important;
+        outline-offset: 2px !important;
+        cursor: crosshair !important;
+        box-shadow: 0 0 0 4px rgba(16,185,129,0.15) !important;
+      }
+    `;
+    document.documentElement.appendChild(s);
   }
 
   function flushTypeBuffer() {
@@ -161,7 +260,6 @@
     });
   }
 
-  // Hook history navigation
   const origPush = history.pushState;
   const origReplace = history.replaceState;
   history.pushState = function () { const r = origPush.apply(this, arguments); onNavigate(); return r; };
@@ -171,8 +269,9 @@
   document.addEventListener("click", onClick, true);
   document.addEventListener("input", onInput, true);
   document.addEventListener("change", onChange, true);
+  document.addEventListener("mousemove", onMouseMove, true);
 
-  // Visual indicator
+  // Indicator
   function showIndicator() {
     let el = document.getElementById("__tc_indicator__");
     const on = recording;
@@ -182,7 +281,7 @@
         el.id = "__tc_indicator__";
         Object.assign(el.style, {
           position: "fixed",
-          zIndex: 2147483647,
+          zIndex: 2147483646,
           right: "12px",
           bottom: "12px",
           padding: "6px 10px",
@@ -195,7 +294,11 @@
         });
         document.documentElement.appendChild(el);
       }
-      if (assertMode) {
+      if (pickMode) {
+        el.textContent = "◎ PICK";
+        el.style.background = "rgba(59,130,246,0.95)";
+        el.style.boxShadow = "0 6px 24px rgba(59,130,246,0.4)";
+      } else if (assertMode) {
         el.textContent = "◉ ASSERT";
         el.style.background = "rgba(16,185,129,0.95)";
         el.style.boxShadow = "0 6px 24px rgba(16,185,129,0.4)";

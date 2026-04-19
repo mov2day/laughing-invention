@@ -1,0 +1,81 @@
+{
+  "summary": "Iteration 3 testing complete. All 18 backend tests pass (100%). All new frontend features verified: ASSERT/PICK mode toggles with mutual exclusivity, live sandbox picker, Alt+Click shortcut, 'Granular assertion control' feature tile on landing page. Dashboard regression passed. Extension file checks verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_api.py",
+    "/app/test_reports/pytest/pytest_results_iter3.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (18/18 tests passed)",
+    "frontend": "100% (all UI flows verified)"
+  },
+  "seed_data_creation": "None - used pre-seeded demo sessions",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 3 complete. All features working: (1) Extension file checks verified: picker.js exposes __TC_openPicker, manifest.json content_scripts injects ['lib/selector.js', 'lib/picker.js', 'content.js'], content.js has pickMode/isInsidePicker/__TC_openPicker, background.js has TC_SET_PICK_MODE/setPickMode/setAssertMode. (2) Frontend /popup: ASSERT MODE and PICK ASSERTION toggles present and mutually exclusive, live sandbox picker works (click element opens AddAssertionModal, save captures assertion to list), Alt+Click opens picker without pick mode. (3) Frontend /: 'Granular assertion control' feature tile renders. (4) Frontend /dashboard regression: 10 timeline steps, 3-tab inspector, 4 framework tabs, AI Regenerate with Claude, Download, framework switching, inspector toggle all working. (5) Backend: all 18 tests pass including new valueEquals assertion test (toHaveValue for Playwright, should('have.value') for Cypress).",
+  "tests_verified": {
+    "backend": [
+      "GET /api/health returns {status: 'healthy'} ✓",
+      "GET /api/ returns service info ✓",
+      "POST /api/generate-script with NO apiKey uses Emergent key, returns Claude model ✓",
+      "POST /api/generate-script with invalid framework returns 400 ✓",
+      "POST /api/generate-script framework=cypress produces describe/cy. patterns ✓",
+      "POST /api/generate-script framework=selenium produces webdriver/By. patterns ✓",
+      "POST /api/generate-script framework=karate produces Feature:/Scenario: patterns ✓",
+      "POST /api/generate-script password redaction passes through ✓",
+      "POST /api/generate-script playwright assertions=[visible,containsText] produces toBeVisible()/toContainText() ✓",
+      "POST /api/generate-script cypress assertions=[visible] produces should('be.visible') ✓",
+      "POST /api/generate-script selenium assertions=[urlContains] produces assert in driver.current_url ✓",
+      "POST /api/generate-script karate assertions=[containsText] produces match text contains ✓",
+      "POST /api/generate-script playwright valueEquals assertion produces toHaveValue('hello') ✓",
+      "POST /api/generate-script cypress valueEquals assertion produces should('have.value', 'hello') ✓",
+      "POST /api/sessions creates session with id ✓",
+      "GET /api/sessions lists sessions ✓",
+      "GET /api/sessions/{id} returns session ✓",
+      "DELETE /api/sessions/{id} removes session ✓",
+      "GET /api/sessions/{deleted_id} returns 404 ✓",
+      "GET /testcapture-extension.zip returns 200 with application/zip ✓"
+    ],
+    "frontend": [
+      "Landing page 'Granular assertion control' feature tile renders ✓",
+      "/popup ASSERT MODE toggle present with data-testid='popup-assert-toggle' ✓",
+      "/popup PICK ASSERTION toggle present with data-testid='popup-pick-toggle' ✓",
+      "/popup toggles are mutually exclusive (clicking one turns off the other) ✓",
+      "/popup sandbox-pick-mode-btn toggles to 'PICK MODE ON' ✓",
+      "/popup clicking sandbox element in pick mode opens AddAssertionModal ✓",
+      "/popup selecting 'visible' assertion type and saving captures to list ✓",
+      "/popup captured assertion shows type (VISIBLE) and target ✓",
+      "/popup Alt+Click opens picker even when pick mode is OFF ✓",
+      "/dashboard 10 timeline steps visible ✓",
+      "/dashboard 3-tab inspector (Selectors/Assertions/Properties) ✓",
+      "/dashboard 4 framework tabs (Playwright/Cypress/Selenium/Karate) ✓",
+      "/dashboard framework switching updates code editor ✓",
+      "/dashboard AI Regenerate works with Claude ✓",
+      "/dashboard Download button present ✓",
+      "/dashboard inspector toggle works ✓",
+      "/dashboard add-assertion buttons on timeline ✓",
+      "/dashboard delete buttons on timeline ✓"
+    ]
+  },
+  "extension_file_checks": {
+    "picker_js_exposes_openPicker": "Verified: window.__TC_openPicker = openPicker at line 302",
+    "manifest_content_scripts": "Verified: js: ['lib/selector.js', 'lib/picker.js', 'content.js']",
+    "content_js_pickMode": "Verified: let pickMode = false at line 17",
+    "content_js_isInsidePicker": "Verified: function isInsidePicker(target) at line 84",
+    "content_js_openPicker_call": "Verified: window.__TC_openPicker?.(el, selector, {...}) at line 105",
+    "background_js_TC_SET_PICK_MODE": "Verified: case 'TC_SET_PICK_MODE' at line 229",
+    "background_js_setPickMode": "Verified: async function setPickMode(on) at line 170",
+    "background_js_setAssertMode": "Verified: async function setAssertMode(on) at line 159"
+  }
+}

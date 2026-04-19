@@ -15,6 +15,7 @@ async function getState() {
     recording: false,
     paused: false,
     assertMode: false,
+    pickMode: false,
     activeSessionId: null,
     activeTabId: null,
     startTime: null,
@@ -93,7 +94,7 @@ async function startRecording(name, tabId) {
       try {
         await chrome.scripting.executeScript({
           target: { tabId: tab.id },
-          files: ["lib/selector.js", "content.js"],
+          files: ["lib/selector.js", "lib/picker.js", "content.js"],
         });
         await chrome.tabs.sendMessage(tab.id, { type: "TC_SET_RECORDING", recording: true });
       } catch (e) {
@@ -156,10 +157,22 @@ async function appendStep(step) {
 }
 
 async function setAssertMode(on) {
-  const state = await setState({ assertMode: !!on });
+  const state = await setState({ assertMode: !!on, pickMode: on ? false : (await getState()).pickMode });
   if (state.activeTabId) {
     try {
       await chrome.tabs.sendMessage(state.activeTabId, { type: "TC_SET_ASSERT_MODE", assertMode: !!on });
+      if (on) await chrome.tabs.sendMessage(state.activeTabId, { type: "TC_SET_PICK_MODE", pickMode: false });
+    } catch (_) {}
+  }
+  return state;
+}
+
+async function setPickMode(on) {
+  const state = await setState({ pickMode: !!on, assertMode: on ? false : (await getState()).assertMode });
+  if (state.activeTabId) {
+    try {
+      await chrome.tabs.sendMessage(state.activeTabId, { type: "TC_SET_PICK_MODE", pickMode: !!on });
+      if (on) await chrome.tabs.sendMessage(state.activeTabId, { type: "TC_SET_ASSERT_MODE", assertMode: false });
     } catch (_) {}
   }
   return state;
@@ -211,6 +224,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           return;
         case "TC_SET_ASSERT_MODE":
           await setAssertMode(msg.assertMode);
+          sendResponse({ ok: true });
+          return;
+        case "TC_SET_PICK_MODE":
+          await setPickMode(msg.pickMode);
           sendResponse({ ok: true });
           return;
         case "TC_UPDATE_STEP": {
@@ -282,10 +299,14 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (state.recording && state.activeTabId === tabId) {
     try {
       await chrome.tabs.sendMessage(tabId, { type: "TC_SET_RECORDING", recording: !state.paused });
+      await chrome.tabs.sendMessage(tabId, { type: "TC_SET_ASSERT_MODE", assertMode: !!state.assertMode });
+      await chrome.tabs.sendMessage(tabId, { type: "TC_SET_PICK_MODE", pickMode: !!state.pickMode });
     } catch (_) {
       try {
-        await chrome.scripting.executeScript({ target: { tabId }, files: ["lib/selector.js", "content.js"] });
+        await chrome.scripting.executeScript({ target: { tabId }, files: ["lib/selector.js", "lib/picker.js", "content.js"] });
         await chrome.tabs.sendMessage(tabId, { type: "TC_SET_RECORDING", recording: !state.paused });
+        await chrome.tabs.sendMessage(tabId, { type: "TC_SET_ASSERT_MODE", assertMode: !!state.assertMode });
+        await chrome.tabs.sendMessage(tabId, { type: "TC_SET_PICK_MODE", pickMode: !!state.pickMode });
       } catch (_) {}
     }
   }

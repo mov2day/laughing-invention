@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Play, MousePointerClick, Code2, Shield, FileCode2, Zap, Eye, Download, GitBranch } from "lucide-react";
+import { Play, MousePointerClick, Code2, Shield, FileCode2, Zap, Eye, Download, GitBranch, ShieldCheck } from "lucide-react";
 
 const frameworks = [
   { name: "Playwright", color: "#45BA4B" },
@@ -11,12 +11,12 @@ const frameworks = [
 ];
 
 const features = [
-  { icon: MousePointerClick, title: "Frictionless recording", body: "Click the toolbar icon, hit Record, then use the app like a human. No code. No setup. Shift+Click anywhere to create an assertion." },
+  { icon: MousePointerClick, title: "Frictionless recording", body: "Click the toolbar icon, hit Record, then use the app like a human. No code. No setup." },
+  { icon: ShieldCheck, title: "Granular assertion control", body: "Three ways to assert — Shift+Click for a quick containsText, Assert Mode for every click, or Pick Mode to open an in-page picker where you choose the type, expected value, and selector strategy for each assertion." },
   { icon: Code2, title: "4 frameworks, one click", body: "Playwright, Cypress, Selenium, and Karate — regenerate the whole script by switching tabs. AI prompts are tuned per-framework for idiomatic output." },
   { icon: Eye, title: "Selector transparency", body: "Every step shows the full selector tree — data-testid → aria → role+text → CSS → XPath — with a stability score. Override any step, any time." },
   { icon: Shield, title: "Password redaction", body: "Input values in type=password fields are replaced with ******** before anything leaves your browser. Your credentials never touch the model." },
   { icon: Zap, title: "Local-first by default", body: "All sessions live in chrome.storage.local. No forced cloud sync. Use your own Anthropic key, or point at your self-hosted proxy." },
-  { icon: FileCode2, title: "Copy, download, commit", body: "Ship to your repo like any other test — no external runners, no dashboards to babysit. TestCapture produces source code you own." },
 ];
 
 const comparison = [

@@ -25,7 +25,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["lib/selector.js", "content.js"],
+      "js": ["lib/selector.js", "lib/picker.js", "content.js"],
       "run_at": "document_idle",
       "all_frames": false
     }

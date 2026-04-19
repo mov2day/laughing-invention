@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "TestCapture AI",
-  "version": "1.0.0",
-  "description": "Record web interactions and generate Playwright, Cypress, Selenium, or Karate scripts with AI.",
+  "version": "1.1.0",
+  "description": "Record web interactions, pick assertions in-page, generate Playwright / Cypress / Selenium / Karate scripts via GitHub Copilot or Claude / GPT.",
   "author": "TestCapture AI",
   "icons": {
     "16": "icons/icon16.png",
@@ -13,42 +13,37 @@
   "action": {
     "default_popup": "popup.html",
     "default_title": "TestCapture AI",
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "32": "icons/icon32.png"
-    }
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png" }
   },
-  "background": {
-    "service_worker": "background.js",
-    "type": "module"
-  },
+  "background": { "service_worker": "background.js", "type": "module" },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
+      "exclude_matches": [
+        "https://github.com/login/*",
+        "https://api.github.com/*",
+        "https://api.githubcopilot.com/*",
+        "https://api.anthropic.com/*",
+        "https://api.openai.com/*"
+      ],
       "js": ["lib/selector.js", "lib/picker.js", "content.js"],
       "run_at": "document_idle",
       "all_frames": false
     }
   ],
-  "permissions": [
-    "activeTab",
-    "tabs",
-    "storage",
-    "scripting",
-    "downloads"
+  "permissions": ["activeTab", "tabs", "storage", "scripting", "downloads"],
+  "host_permissions": [
+    "<all_urls>",
+    "https://github.com/*",
+    "https://api.github.com/*",
+    "https://api.githubcopilot.com/*",
+    "https://api.anthropic.com/*",
+    "https://api.openai.com/*"
   ],
-  "host_permissions": ["<all_urls>"],
   "web_accessible_resources": [
-    {
-      "resources": ["dashboard.html", "lib/*"],
-      "matches": ["<all_urls>"]
-    }
+    { "resources": ["dashboard.html", "auth.html", "lib/*"], "matches": ["<all_urls>"] }
   ],
   "commands": {
-    "_execute_action": {
-      "suggested_key": {
-        "default": "Alt+Shift+T"
-      }
-    }
+    "_execute_action": { "suggested_key": { "default": "Alt+Shift+T" } }
   }
 }

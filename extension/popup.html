@@ -14,28 +14,50 @@
           <div class="tc-brand-domain" id="tc-domain">--</div>
         </div>
       </div>
-      <button class="tc-icon-btn" id="tc-settings-btn" title="Settings" data-testid="popup-settings-btn">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-      </button>
+      <div style="display:flex;gap:6px">
+        <button class="tc-icon-btn" id="tc-open-dash-top" title="Dashboard" data-testid="popup-open-dashboard-top">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>
+        </button>
+        <button class="tc-icon-btn" id="tc-settings-btn" title="Settings" data-testid="popup-settings-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
     </header>
 
     <section class="tc-settings" id="tc-settings-panel" hidden>
-      <label class="tc-field">
-        <span>ANTHROPIC API KEY</span>
-        <input type="password" id="tc-api-key" placeholder="sk-ant-..." data-testid="popup-api-key-input"/>
-      </label>
-      <label class="tc-field">
-        <span>MODEL</span>
-        <select id="tc-model" data-testid="popup-model-select">
-          <option value="claude-sonnet-4-5-20250929">claude-sonnet-4-5</option>
-          <option value="claude-opus-4-5-20251101">claude-opus-4-5</option>
-          <option value="claude-haiku-4-5-20251001">claude-haiku-4-5</option>
+      <div class="tc-field">
+        <span>AI PROVIDER</span>
+        <select id="tc-provider" data-testid="popup-provider-select">
+          <option value="copilot">GitHub Copilot</option>
+          <option value="anthropic">Anthropic (direct)</option>
+          <option value="openai">OpenAI (direct)</option>
+          <option value="offline">Offline templates</option>
         </select>
-      </label>
-      <label class="tc-field">
-        <span>PROXY URL (optional)</span>
-        <input type="text" id="tc-proxy" placeholder="https://your-backend/api" data-testid="popup-proxy-input"/>
-      </label>
+      </div>
+
+      <div class="tc-field tc-provider-block" data-provider="copilot">
+        <span>GITHUB COPILOT STATUS</span>
+        <div class="tc-status-row">
+          <span id="tc-copilot-status" class="tc-pill">Not connected</span>
+          <button class="tc-btn tc-btn-secondary" id="tc-connect-copilot" data-testid="popup-connect-copilot">Connect</button>
+          <button class="tc-btn tc-btn-ghost" id="tc-disconnect-copilot" hidden data-testid="popup-disconnect-copilot">Disconnect</button>
+        </div>
+      </div>
+
+      <div class="tc-field tc-provider-block" data-provider="anthropic" hidden>
+        <span>ANTHROPIC API KEY</span>
+        <input type="password" id="tc-anthropic-key" placeholder="sk-ant-..." data-testid="popup-anthropic-key"/>
+      </div>
+      <div class="tc-field tc-provider-block" data-provider="openai" hidden>
+        <span>OPENAI API KEY</span>
+        <input type="password" id="tc-openai-key" placeholder="sk-..." data-testid="popup-openai-key"/>
+      </div>
+
+      <div class="tc-field">
+        <span>MODEL <button class="tc-linkbtn" id="tc-refresh-models" title="Reload models from provider" data-testid="popup-refresh-models">↻</button></span>
+        <select id="tc-model" data-testid="popup-model-select"></select>
+      </div>
+
       <button class="tc-btn tc-btn-primary" id="tc-settings-save" data-testid="popup-settings-save">Save</button>
     </section>
 
@@ -53,24 +75,24 @@
         </button>
         <button class="tc-btn tc-btn-secondary" id="tc-pause-btn" disabled data-testid="popup-pause-btn">PAUSE</button>
       </div>
-      <label class="tc-assert-toggle" title="When ON, any click captures as an assertion (validate visible). Shift+Click always creates an assertion regardless.">
+      <label class="tc-assert-toggle">
         <input type="checkbox" id="tc-assert-mode" data-testid="popup-assert-mode"/>
         <span class="tc-assert-label"><span class="tc-assert-dot"></span> ASSERT MODE</span>
         <span class="tc-assert-hint">click = validate</span>
       </label>
-      <label class="tc-pick-toggle" title="When ON, clicking an element opens an in-page picker where you choose the assertion type, expected value, and selector. Alt+Click always opens the picker regardless.">
+      <label class="tc-pick-toggle">
         <input type="checkbox" id="tc-pick-mode" data-testid="popup-pick-mode"/>
         <span class="tc-assert-label"><span class="tc-pick-dot"></span> PICK ASSERTION</span>
         <span class="tc-assert-hint">click → picker</span>
       </label>
       <div class="tc-shortcut">
-        <span class="tc-kbd">Shift</span>+<span class="tc-kbd">Click</span> quick assert ·
-        <span class="tc-kbd">Alt</span>+<span class="tc-kbd">Click</span> open picker
+        <span class="tc-kbd">Shift</span>+<span class="tc-kbd">Click</span> quick ·
+        <span class="tc-kbd">Alt</span>+<span class="tc-kbd">Click</span> picker
       </div>
     </section>
 
     <section class="tc-recent">
-      <div class="tc-section-title">RECENT STEPS</div>
+      <div class="tc-section-title">RECENT STEPS · <span id="tc-provider-pill" class="tc-mini-pill">offline</span></div>
       <div class="tc-steps" id="tc-recent-steps">
         <div class="tc-empty">Waiting for interactions…</div>
       </div>
@@ -85,10 +107,11 @@
       </select>
       <button class="tc-btn tc-btn-primary" id="tc-copy-btn" data-testid="popup-copy-btn">COPY</button>
       <button class="tc-btn tc-btn-secondary" id="tc-export-btn" data-testid="popup-export-btn">EXPORT</button>
-      <button class="tc-btn tc-btn-ghost" id="tc-open-dash-btn" data-testid="popup-open-dashboard-btn">DASHBOARD →</button>
+      <button class="tc-btn tc-btn-ghost" id="tc-open-dash-btn" data-testid="popup-open-dashboard-btn">DASH →</button>
     </footer>
 
     <div class="tc-toast" id="tc-toast" hidden></div>
-    <script src="popup.js" type="module"></script>
+    <script src="lib/ai.js"></script>
+    <script src="popup.js"></script>
   </body>
 </html>

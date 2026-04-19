@@ -69,26 +69,45 @@
           <button class="tc-icon-btn" id="tc-settings-close">✕</button>
         </div>
         <label class="tc-field">
-          <span>ANTHROPIC API KEY</span>
-          <input type="password" id="tc-dash-api-key" placeholder="sk-ant-..." data-testid="dash-api-key-input"/>
-        </label>
-        <label class="tc-field">
-          <span>MODEL</span>
-          <select id="tc-dash-model" data-testid="dash-model-select">
-            <option value="claude-sonnet-4-5-20250929">claude-sonnet-4-5</option>
-            <option value="claude-opus-4-5-20251101">claude-opus-4-5</option>
-            <option value="claude-haiku-4-5-20251001">claude-haiku-4-5</option>
+          <span>AI PROVIDER</span>
+          <select id="tc-dash-provider" data-testid="dash-provider-select">
+            <option value="copilot">GitHub Copilot</option>
+            <option value="anthropic">Anthropic (direct)</option>
+            <option value="openai">OpenAI (direct)</option>
+            <option value="offline">Offline templates</option>
           </select>
         </label>
+        <div class="tc-field tc-provider-block" data-provider="copilot">
+          <span>COPILOT STATUS</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span id="tc-dash-copilot-status" class="tc-pill">Not connected</span>
+            <button class="tc-btn tc-btn-secondary" id="tc-dash-connect" data-testid="dash-connect-copilot">Connect</button>
+            <button class="tc-btn tc-btn-ghost" id="tc-dash-disconnect" hidden data-testid="dash-disconnect-copilot">Disconnect</button>
+          </div>
+        </div>
+        <label class="tc-field tc-provider-block" data-provider="anthropic" hidden>
+          <span>ANTHROPIC API KEY</span>
+          <input type="password" id="tc-dash-anthropic" placeholder="sk-ant-..." data-testid="dash-anthropic-key"/>
+        </label>
+        <label class="tc-field tc-provider-block" data-provider="openai" hidden>
+          <span>OPENAI API KEY</span>
+          <input type="password" id="tc-dash-openai" placeholder="sk-..." data-testid="dash-openai-key"/>
+        </label>
         <label class="tc-field">
-          <span>PROXY URL (FastAPI backend, e.g. https://your-backend/api)</span>
-          <input type="text" id="tc-dash-proxy" placeholder="https://..."  data-testid="dash-proxy-input"/>
+          <span>MODEL <button class="tc-linkbtn" id="tc-dash-refresh-models" data-testid="dash-refresh-models">↻</button></span>
+          <select id="tc-dash-model" data-testid="dash-model-select"></select>
+        </label>
+        <label class="tc-field">
+          <span>TEAM ACTIVATION KEY (optional — enables shared sessions)</span>
+          <input type="text" id="tc-dash-license" placeholder="TC-XXXX-XXXX-XXXX" data-testid="dash-license-input"/>
+          <span id="tc-dash-license-status" class="tc-pill" style="margin-top:6px;align-self:flex-start">Inactive</span>
         </label>
         <button class="tc-btn tc-btn-primary" id="tc-dash-settings-save" data-testid="dash-settings-save">SAVE</button>
       </div>
     </div>
 
     <div class="tc-toast" id="tc-toast" hidden></div>
-    <script src="dashboard.js" type="module"></script>
+    <script src="lib/ai.js"></script>
+    <script src="dashboard.js"></script>
   </body>
 </html>

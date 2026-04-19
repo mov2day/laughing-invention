@@ -95,6 +95,18 @@ body.tc-popup {
   padding: 1px 5px; border-radius: 3px; color: #A1A1AA; font-size: 9px; margin: 0 1px;
 }
 
+.tc-status-row { display: flex; align-items: center; gap: 8px; }
+.tc-pill { font: 600 10px/1 "JetBrains Mono", monospace; letter-spacing: 0.1em; padding: 4px 8px; border-radius: 999px; border: 1px solid #27272A; color: #A1A1AA; background: #0F0F0F; text-transform: uppercase; }
+.tc-pill.ok { border-color: #10B981; color: #10B981; background: rgba(16,185,129,0.08); }
+.tc-pill.warn { border-color: #F59E0B; color: #F59E0B; background: rgba(245,158,11,0.08); }
+.tc-mini-pill { font: 600 9px/1 "JetBrains Mono", monospace; letter-spacing: 0.14em; padding: 2px 6px; border-radius: 3px; background: #18181B; color: #A1A1AA; text-transform: uppercase; margin-left: 4px; }
+.tc-mini-pill.copilot { background: rgba(59,130,246,0.15); color: #60A5FA; }
+.tc-mini-pill.anthropic { background: rgba(217,70,70,0.15); color: #F87171; }
+.tc-mini-pill.openai { background: rgba(16,185,129,0.15); color: #34D399; }
+.tc-linkbtn { background: transparent; border: none; color: #A1A1AA; cursor: pointer; padding: 0 4px; font-size: 12px; margin-left: 6px; }
+.tc-linkbtn:hover { color: #FAFAFA; }
+.tc-provider-block[hidden] { display: none !important; }
+
 .tc-btn {
   appearance: none; cursor: pointer; user-select: none;
   border: 1px solid #27272A; background: transparent; color: #FAFAFA;

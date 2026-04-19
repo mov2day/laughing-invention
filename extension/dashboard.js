@@ -66,25 +66,89 @@ function bindEvents() {
   });
   $("#tc-settings-open").addEventListener("click", () => ($("#tc-settings-modal").hidden = false));
   $("#tc-settings-close").addEventListener("click", () => ($("#tc-settings-modal").hidden = true));
+  $("#tc-dash-provider").addEventListener("change", async (e) => { showProviderBlocks(e.target.value); await populateModelList(e.target.value); });
+  $("#tc-dash-refresh-models").addEventListener("click", async (e) => { e.preventDefault(); await populateModelList($("#tc-dash-provider").value); });
+  $("#tc-dash-connect").addEventListener("click", async () => { const url = chrome.runtime.getURL("auth.html"); await chrome.tabs.create({ url }); });
+  $("#tc-dash-disconnect").addEventListener("click", async () => { await window.TCAI.copilot.disconnect(); await refreshCopilotStatus(); toast("Disconnected"); });
   $("#tc-dash-settings-save").addEventListener("click", async () => {
-    const settings = {
-      apiKey: $("#tc-dash-api-key").value.trim(),
+    await window.TCAI.setSettings({
+      provider: $("#tc-dash-provider").value,
       model: $("#tc-dash-model").value,
-      proxyUrl: $("#tc-dash-proxy").value.trim(),
-      framework: state.framework,
-    };
-    await chrome.storage.local.set({ tc_settings: settings });
+      apiKey: $("#tc-dash-anthropic").value.trim(),
+      openaiKey: $("#tc-dash-openai").value.trim(),
+    });
+    const key = $("#tc-dash-license").value.trim();
+    if (key) await validateLicense(key); else await chrome.storage.local.remove("tc_license");
+    await refreshLicenseStatus();
     $("#tc-settings-modal").hidden = true;
     toast("Settings saved");
   });
 }
 
+async function validateLicense(key) {
+  try {
+    const backend = await getBackendUrl();
+    if (!backend) { await chrome.storage.local.set({ tc_license: { key, valid: false, reason: "no-backend" } }); return; }
+    const r = await fetch(backend.replace(/\/$/, "") + "/api/license/activate", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key }),
+    });
+    const data = await r.json();
+    await chrome.storage.local.set({ tc_license: { key, valid: !!data.valid, plan: data.plan, features: data.features || [] } });
+  } catch (e) {
+    await chrome.storage.local.set({ tc_license: { key, valid: false, reason: String(e) } });
+  }
+}
+
+async function getBackendUrl() {
+  const { tc_backend_url } = await chrome.storage.local.get("tc_backend_url");
+  return tc_backend_url || "";
+}
+
 async function loadSettings() {
-  const { tc_settings } = await chrome.storage.local.get("tc_settings");
-  const s = tc_settings || {};
-  $("#tc-dash-api-key").value = s.apiKey || "";
-  $("#tc-dash-model").value = s.model || "claude-sonnet-4-5-20250929";
-  $("#tc-dash-proxy").value = s.proxyUrl || "";
+  const s = await window.TCAI.getSettings();
+  $("#tc-dash-provider").value = s.provider || "offline";
+  $("#tc-dash-anthropic").value = s.apiKey || "";
+  $("#tc-dash-openai").value = s.openaiKey || "";
+  showProviderBlocks(s.provider || "offline");
+  await refreshCopilotStatus();
+  await populateModelList(s.provider || "offline");
+  await refreshLicenseStatus();
+}
+function showProviderBlocks(p) {
+  document.querySelectorAll(".tc-provider-block").forEach((el) => { el.hidden = el.dataset.provider !== p; });
+}
+async function refreshCopilotStatus() {
+  const st = await window.TCAI.copilot.status();
+  const pill = $("#tc-dash-copilot-status");
+  if (st.signed_in) { pill.textContent = st.session_valid ? "Connected ✓" : "Connected"; pill.className = "tc-pill ok"; $("#tc-dash-connect").hidden = true; $("#tc-dash-disconnect").hidden = false; }
+  else { pill.textContent = "Not connected"; pill.className = "tc-pill"; $("#tc-dash-connect").hidden = false; $("#tc-dash-disconnect").hidden = true; }
+}
+async function populateModelList(provider) {
+  const sel = $("#tc-dash-model");
+  sel.innerHTML = `<option value="">Loading…</option>`;
+  try {
+    if (provider === "offline") { sel.innerHTML = `<option value="deterministic">deterministic</option>`; return; }
+    const models = await window.TCAI.listModels(provider);
+    sel.innerHTML = models.length
+      ? models.map((m) => `<option value="${esc(m.id)}">${esc(m.label || m.id)}</option>`).join("")
+      : `<option value="">No models — check credentials</option>`;
+    const s = await window.TCAI.getSettings();
+    if (s.model && [...sel.options].some((o) => o.value === s.model)) sel.value = s.model;
+  } catch (e) {
+    sel.innerHTML = `<option value="">Error loading models</option>`;
+  }
+}
+async function refreshLicenseStatus() {
+  const { tc_license } = await chrome.storage.local.get("tc_license");
+  const pill = $("#tc-dash-license-status");
+  const input = $("#tc-dash-license");
+  if (tc_license?.key) {
+    input.value = tc_license.key;
+    pill.textContent = tc_license.valid ? `Active · ${tc_license.plan || "team"}` : "Inactive (validation failed)";
+    pill.className = tc_license.valid ? "tc-pill ok" : "tc-pill warn";
+  } else {
+    pill.textContent = "Inactive"; pill.className = "tc-pill";
+  }
 }
 
 async function refreshList() {
@@ -233,24 +297,11 @@ async function generate(force = false) {
   }
   $("#tc-code-meta").textContent = "GENERATING…";
   $("#tc-code").textContent = "// generating…";
-  const { tc_settings } = await chrome.storage.local.get("tc_settings");
-  const proxy = tc_settings?.proxyUrl || "";
-  let code = null;
-  if (proxy) {
-    try {
-      const r = await fetch(proxy.replace(/\/$/, "") + "/generate-script", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ session: s, framework: state.framework, apiKey: tc_settings?.apiKey || undefined, model: tc_settings?.model || undefined }),
-      });
-      const data = await r.json();
-      code = data.code;
-      $("#tc-code-meta").textContent = (data.model || "").toUpperCase();
-    } catch (e) { console.warn(e); }
-  }
-  if (!code) {
-    code = offlineGenerate(s, state.framework);
-    $("#tc-code-meta").textContent = "OFFLINE";
-  }
+  const result = await window.TCAI.generate({ session: s, framework: state.framework });
+  const code = result.data?.code || offlineGenerate(s, state.framework);
+  $("#tc-code-meta").textContent = result.ok
+    ? `${(result.data.provider || "").toUpperCase()} · ${(result.data.model || "").toUpperCase()}`
+    : "OFFLINE · FALLBACK";
   s.generatedCode = { ...(s.generatedCode || {}), [state.framework]: code };
   await send({ type: "TC_UPDATE_SESSION", session: s });
   renderCode(code);
@@ -276,52 +327,5 @@ function toast(txt) { const t = $("#tc-toast"); t.textContent = txt; t.hidden = 
 function esc(v) { return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
 function offlineGenerate(session, framework) {
-  const name = session.name || "Recorded test";
-  const origin = session.targetOrigin || "https://example.com";
-  const steps = session.steps || [];
-  const lines = [];
-  if (framework === "playwright") {
-    lines.push("import { test, expect } from '@playwright/test';", "", `test('${name}', async ({ page }) => {`, `  await page.goto('${origin}');`);
-    steps.forEach((s) => {
-      const sv = s.selector?.value || ""; const strat = s.selector?.strategy || "css";
-      const loc = strat === "data-testid" ? `page.getByTestId('${sv}')` : strat === "aria-label" ? `page.getByLabel('${sv}')` : strat === "role" ? `page.getByRole('${sv}')` : `page.locator('${sv}')`;
-      if (s.type === "click") lines.push(`  await ${loc}.click(); // ${s.label}`);
-      else if (s.type === "type") lines.push(`  await ${loc}.fill('${s.value || ""}');`);
-      else if (s.type === "navigate") lines.push(`  await page.goto('${s.value || ""}');`);
-      else if (s.type === "validate") lines.push(`  await expect(${loc}).toContainText('${s.value || ""}');`);
-      else if (s.type === "select") lines.push(`  await ${loc}.selectOption('${s.value || ""}');`);
-    });
-    lines.push("});");
-  } else if (framework === "cypress") {
-    lines.push(`describe('${name}', () => {`, `  it('runs', () => {`, `    cy.visit('${origin}');`);
-    steps.forEach((s) => {
-      const sv = s.selector?.value || ""; const strat = s.selector?.strategy || "css";
-      const get = strat === "data-testid" ? `cy.get('[data-testid="${sv}"]')` : `cy.get('${sv}')`;
-      if (s.type === "click") lines.push(`    ${get}.click();`);
-      else if (s.type === "type") lines.push(`    ${get}.type('${s.value || ""}');`);
-      else if (s.type === "navigate") lines.push(`    cy.visit('${s.value || ""}');`);
-      else if (s.type === "validate") lines.push(`    ${get}.should('contain.text', '${s.value || ""}');`);
-    });
-    lines.push("  });", "});");
-  } else if (framework === "selenium") {
-    lines.push("from selenium import webdriver", "from selenium.webdriver.common.by import By", "", `def test_${name.toLowerCase().replace(/\s+/g, "_")}():`, "    driver = webdriver.Chrome()", `    driver.get('${origin}')`);
-    steps.forEach((s) => {
-      const sv = s.selector?.value || ""; const by = s.selector?.strategy === "xpath" ? "By.XPATH" : "By.CSS_SELECTOR";
-      if (s.type === "click") lines.push(`    driver.find_element(${by}, '${sv}').click()`);
-      else if (s.type === "type") lines.push(`    driver.find_element(${by}, '${sv}').send_keys('${s.value || ""}')`);
-      else if (s.type === "navigate") lines.push(`    driver.get('${s.value || ""}')`);
-      else if (s.type === "validate") lines.push(`    assert '${s.value || ""}' in driver.find_element(${by}, '${sv}').text`);
-    });
-    lines.push("    driver.quit()");
-  } else if (framework === "karate") {
-    lines.push(`Feature: ${name}`, "", "  Scenario: Captured flow", `    * driver '${origin}'`);
-    steps.forEach((s) => {
-      const sv = s.selector?.value || "";
-      if (s.type === "click") lines.push(`    * click("${sv}")`);
-      else if (s.type === "type") lines.push(`    * input("${sv}", "${s.value || ""}")`);
-      else if (s.type === "navigate") lines.push(`    * driver '${s.value || ""}'`);
-      else if (s.type === "validate") lines.push(`    * match text("${sv}") contains "${s.value || ""}"`);
-    });
-  }
-  return lines.join("\n");
+  return window.TCAI.offlineGenerate(session, framework);
 }

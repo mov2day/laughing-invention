@@ -91,7 +91,7 @@ body.tc-dash { display: grid; grid-template-columns: 260px 1fr; height: 100vh; o
 .tc-empty { color: #52525B; text-align: center; padding: 36px 14px; font-size: 12px; }
 
 .tc-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.72); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; z-index: 50; }
-.tc-modal-body { width: 420px; background: #121212; border: 1px solid #27272A; border-radius: 6px; padding: 16px; display: grid; gap: 12px; }
+.tc-modal-body { width: 480px; max-height: 88vh; overflow:auto; background: #121212; border: 1px solid #27272A; border-radius: 6px; padding: 16px; display: grid; gap: 12px; }
 .tc-modal-head { display: flex; justify-content: space-between; align-items: center; font: 600 11px/1 "JetBrains Mono", monospace; color: #A1A1AA; letter-spacing: 0.14em; }
 .tc-field { display: flex; flex-direction: column; gap: 4px; }
 .tc-field > span { font: 600 10px/1 "JetBrains Mono", monospace; letter-spacing: 0.12em; color: #71717A; }
@@ -99,3 +99,9 @@ body.tc-dash { display: grid; grid-template-columns: 260px 1fr; height: 100vh; o
 .tc-field input:focus, .tc-field select:focus { border-color: #71717A; }
 
 .tc-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #18181B; border: 1px solid #27272A; color: #FAFAFA; padding: 8px 14px; border-radius: 4px; font: 11px/1 "JetBrains Mono", monospace; letter-spacing: 0.08em; z-index: 60; }
+.tc-pill { font: 600 10px/1 "JetBrains Mono", monospace; letter-spacing: 0.1em; padding: 4px 8px; border-radius: 999px; border: 1px solid #27272A; color: #A1A1AA; background: #0F0F0F; text-transform: uppercase; }
+.tc-pill.ok { border-color: #10B981; color: #10B981; background: rgba(16,185,129,0.08); }
+.tc-pill.warn { border-color: #F59E0B; color: #F59E0B; background: rgba(245,158,11,0.08); }
+.tc-linkbtn { background: transparent; border: none; color: #A1A1AA; cursor: pointer; padding: 0 4px; font-size: 12px; margin-left: 6px; }
+.tc-linkbtn:hover { color: #FAFAFA; }
+.tc-provider-block[hidden] { display: none !important; }

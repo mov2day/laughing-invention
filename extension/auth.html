@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TestCapture AI — Connect GitHub Copilot</title>
+    <link rel="stylesheet" href="auth.css" />
+  </head>
+  <body class="auth">
+    <main class="card">
+      <div class="brand">
+        <div class="logo"></div>
+        <div>
+          <div class="brand-name">TestCapture AI</div>
+          <div class="brand-sub">Connect GitHub Copilot</div>
+        </div>
+      </div>
+
+      <section class="step" id="intro">
+        <h1>Use your Copilot subscription for AI generation</h1>
+        <p>TestCapture AI uses GitHub's official device-authorization flow. We never see your password. Your GitHub access token stays in this browser's local extension storage.</p>
+        <ul class="bullets">
+          <li>Click <b>Start</b> below — we'll generate a short code.</li>
+          <li>Open the GitHub page we provide and paste the code.</li>
+          <li>Come back here. We'll detect the authorization automatically.</li>
+        </ul>
+        <button id="start-btn" class="btn primary" data-testid="auth-start-btn">Start · Connect GitHub</button>
+      </section>
+
+      <section class="step" id="pending" hidden>
+        <h1>Step 1 — enter this code on GitHub</h1>
+        <div class="code-box" data-testid="auth-code-box">
+          <span id="user-code"></span>
+          <button id="copy-code" class="btn ghost" data-testid="auth-copy-code">Copy</button>
+        </div>
+        <a id="open-github" class="btn" target="_blank" rel="noreferrer noopener" data-testid="auth-open-github">Open github.com/login/device ↗</a>
+        <div class="status" id="status" data-testid="auth-status">Waiting for you to approve on GitHub…</div>
+        <div class="progress"><div class="progress-fill" id="progress-fill"></div></div>
+        <div class="hint">This page stays open and auto-detects the approval. Code expires in <span id="expires-label">10</span> minutes.</div>
+      </section>
+
+      <section class="step" id="done" hidden>
+        <h1>✓ Connected</h1>
+        <p>Your GitHub Copilot is now wired into TestCapture AI. You can pick a model and start generating scripts.</p>
+        <div id="model-summary" class="model-summary"></div>
+        <div class="actions">
+          <button id="go-popup" class="btn primary" data-testid="auth-go-popup">Open the popup</button>
+          <button id="close-tab" class="btn" data-testid="auth-close">Close this tab</button>
+        </div>
+      </section>
+
+      <section class="step" id="error" hidden>
+        <h1>Something went wrong</h1>
+        <pre class="err" id="err-message"></pre>
+        <div class="actions">
+          <button id="retry" class="btn primary" data-testid="auth-retry">Retry</button>
+        </div>
+      </section>
+    </main>
+    <script src="lib/ai.js"></script>
+    <script src="auth.js"></script>
+  </body>
+</html>

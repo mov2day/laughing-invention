@@ -1,20 +1,43 @@
 """
-TestCapture AI — Backend API
-Serves:
-  - /api/generate-script  : Proxies session data to Claude and returns generated test code
-  - /api/sessions         : CRUD for demo/shared sessions (MongoDB)
-  - /api/health           : health check
+TestCapture AI — Backend API (Team & License server)
+
+This backend is OPTIONAL. The Chrome extension and hosted web demo
+work fully standalone (all AI calls happen client-side — Copilot / Anthropic / OpenAI / offline).
+
+Purpose of this server:
+  - Activation-key-gated paid features for teams:
+    * POST /api/license/activate   → validate an activation key
+    * GET  /api/license/status     → check an issued token
+    * POST /api/team/sessions      → share a recorded session with your team
+    * GET  /api/team/sessions      → list team sessions (LicenseRequired)
+    * GET  /api/team/sessions/{id} → fetch one
+    * DELETE /api/team/sessions/{id}
+    * POST /api/team/invite        → create an invite token
+    * POST /api/team/join          → redeem an invite token
+  - Backward-compat:
+    * POST /api/generate-script    → LEGACY. Kept so older clients still work.
+
+Activation keys are seeded in `licenses` collection on startup:
+    TC-DEMO-TEAM-2026 → free "team" plan (5 seats)
+    TC-PRO-2026       → "pro" plan (25 seats)
+    TC-ENT-2026       → "enterprise" plan (unlimited)
+
+Seats are soft-counted per team_id. A seat is consumed when a new member joins.
 """
+
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 import os
+import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -23,56 +46,21 @@ from pydantic import BaseModel, ConfigDict, Field
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
-# --------------------------------------------------------------------------------------
-# Infrastructure
-# --------------------------------------------------------------------------------------
 mongo_url = os.environ["MONGO_URL"]
+db_name = os.environ["DB_NAME"]
+LICENSE_SIGNING_SECRET = os.environ.get("LICENSE_SIGNING_SECRET", "testcapture-dev-secret-rotate-me")
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ["DB_NAME"]]
+db = client[db_name]
 
-app = FastAPI(title="TestCapture AI API", version="1.0.0")
+app = FastAPI(title="TestCapture AI — Team Backend", version="1.1.0")
 api_router = APIRouter(prefix="/api")
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("testcapture")
-
 
 # --------------------------------------------------------------------------------------
 # Models
 # --------------------------------------------------------------------------------------
-class SelectorResult(BaseModel):
-    model_config = ConfigDict(extra="allow")
-    strategy: str
-    value: str
-    stability: str = "medium"  # high | medium | low
-    alternatives: List[Dict[str, str]] = Field(default_factory=list)
-
-
-class Assertion(BaseModel):
-    type: str
-    target: Optional[str] = None
-    expected: Optional[str] = None
-
-
-class RecordedStep(BaseModel):
-    model_config = ConfigDict(extra="allow")
-    id: str
-    stepNumber: int
-    type: str
-    label: str
-    timestamp: int
-    selector: Optional[SelectorResult] = None
-    value: Optional[str] = None
-    assertions: List[Assertion] = Field(default_factory=list)
-    screenshot: Optional[str] = None
-    elementProps: Dict[str, Any] = Field(default_factory=dict)
-    annotation: Optional[str] = None
-    url: Optional[str] = None
-
-
 class Session(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -81,9 +69,11 @@ class Session(BaseModel):
     status: str = "saved"
     startTime: int
     targetOrigin: Optional[str] = None
-    steps: List[RecordedStep] = Field(default_factory=list)
+    steps: List[Dict[str, Any]] = Field(default_factory=list)
     selectedFramework: str = "playwright"
     generatedCode: Dict[str, str] = Field(default_factory=dict)
+    team_id: Optional[str] = None
+    shared_by: Optional[str] = None
     createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -94,13 +84,263 @@ class SessionCreate(BaseModel):
     targetOrigin: Optional[str] = None
     steps: List[Dict[str, Any]] = Field(default_factory=list)
     selectedFramework: str = "playwright"
+    generatedCode: Dict[str, str] = Field(default_factory=dict)
 
 
+class ActivateRequest(BaseModel):
+    key: str
+    device_id: Optional[str] = None  # optional marker for tracking which device activated
+
+
+class ActivateResponse(BaseModel):
+    valid: bool
+    plan: Optional[str] = None
+    features: List[str] = Field(default_factory=list)
+    team_id: Optional[str] = None
+    seats_used: Optional[int] = None
+    seats_total: Optional[int] = None
+    token: Optional[str] = None  # opaque license token, pass as X-License-Token
+    message: Optional[str] = None
+
+
+class InviteRequest(BaseModel):
+    email: Optional[str] = None  # optional metadata; not used for auth
+
+
+class InviteResponse(BaseModel):
+    invite_token: str
+    expires_at: datetime
+    team_id: str
+
+
+class JoinRequest(BaseModel):
+    invite_token: str
+
+
+class LicenseStatus(BaseModel):
+    valid: bool
+    plan: Optional[str] = None
+    team_id: Optional[str] = None
+    features: List[str] = Field(default_factory=list)
+    seats_used: Optional[int] = None
+    seats_total: Optional[int] = None
+
+
+# --------------------------------------------------------------------------------------
+# License seeding
+# --------------------------------------------------------------------------------------
+SEED_LICENSES = [
+    {"key": "TC-DEMO-TEAM-2026", "plan": "team", "seats_total": 5,
+     "features": ["team_sessions", "invites"]},
+    {"key": "TC-PRO-2026", "plan": "pro", "seats_total": 25,
+     "features": ["team_sessions", "invites", "sso"]},
+    {"key": "TC-ENT-2026", "plan": "enterprise", "seats_total": 10_000,
+     "features": ["team_sessions", "invites", "sso", "audit_log"]},
+]
+
+
+@app.on_event("startup")
+async def seed_licenses():
+    for lic in SEED_LICENSES:
+        await db.licenses.update_one(
+            {"key": lic["key"]},
+            {"$setOnInsert": {**lic, "team_id": f"team-{lic['key'].lower()}", "seats_used": 0,
+                              "createdAt": datetime.now(timezone.utc).isoformat()}},
+            upsert=True,
+        )
+    logger.info("License seed ensured: %d entries", len(SEED_LICENSES))
+
+
+# --------------------------------------------------------------------------------------
+# Token minting
+# --------------------------------------------------------------------------------------
+def mint_license_token(key: str, team_id: str, plan: str) -> str:
+    payload = f"{key}|{team_id}|{plan}|{secrets.token_hex(8)}"
+    sig = hmac.new(LICENSE_SIGNING_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:24]
+    return f"tctk_{sig}.{payload.replace('|', '.')}"
+
+
+async def _license_doc_from_token(token: str) -> Optional[Dict[str, Any]]:
+    if not token or not token.startswith("tctk_"):
+        return None
+    try:
+        _sig, rest = token.split(".", 1)
+        key, team_id, plan, _nonce = rest.split(".", 3)
+    except Exception:
+        return None
+    doc = await db.licenses.find_one({"key": key}, {"_id": 0})
+    if not doc:
+        return None
+    if doc.get("team_id") != team_id or doc.get("plan") != plan:
+        return None
+    return doc
+
+
+async def require_license(x_license_token: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+    doc = await _license_doc_from_token(x_license_token or "")
+    if not doc:
+        raise HTTPException(status_code=401, detail="Invalid or missing license token")
+    return doc
+
+
+# --------------------------------------------------------------------------------------
+# Public health
+# --------------------------------------------------------------------------------------
+@api_router.get("/")
+async def root():
+    return {"service": "TestCapture AI Team Backend", "status": "ok", "version": "1.1.0"}
+
+
+@api_router.get("/health")
+async def health():
+    return {"status": "healthy", "time": datetime.now(timezone.utc).isoformat()}
+
+
+# --------------------------------------------------------------------------------------
+# License activation
+# --------------------------------------------------------------------------------------
+@api_router.post("/license/activate", response_model=ActivateResponse)
+async def activate(req: ActivateRequest):
+    key = (req.key or "").strip().upper()
+    doc = await db.licenses.find_one({"key": key}, {"_id": 0})
+    if not doc:
+        return ActivateResponse(valid=False, message="Unknown activation key")
+    token = mint_license_token(doc["key"], doc["team_id"], doc["plan"])
+    return ActivateResponse(
+        valid=True,
+        plan=doc["plan"],
+        features=doc.get("features", []),
+        team_id=doc["team_id"],
+        seats_used=doc.get("seats_used", 0),
+        seats_total=doc.get("seats_total"),
+        token=token,
+        message=f"Activated under the {doc['plan']} plan",
+    )
+
+
+@api_router.get("/license/status", response_model=LicenseStatus)
+async def license_status(lic: Dict[str, Any] = Depends(require_license)):
+    return LicenseStatus(
+        valid=True,
+        plan=lic["plan"],
+        team_id=lic["team_id"],
+        features=lic.get("features", []),
+        seats_used=lic.get("seats_used", 0),
+        seats_total=lic.get("seats_total"),
+    )
+
+
+# --------------------------------------------------------------------------------------
+# Team sessions (shared)
+# --------------------------------------------------------------------------------------
+@api_router.post("/team/sessions", response_model=Session)
+async def create_team_session(payload: SessionCreate, lic: Dict[str, Any] = Depends(require_license)):
+    if "team_sessions" not in lic.get("features", []):
+        raise HTTPException(status_code=403, detail="Team sessions not included in this plan")
+    session = Session(
+        name=payload.name,
+        project=payload.project or "default",
+        startTime=payload.startTime,
+        targetOrigin=payload.targetOrigin,
+        steps=payload.steps,
+        selectedFramework=payload.selectedFramework,
+        generatedCode=payload.generatedCode or {},
+        team_id=lic["team_id"],
+        shared_by="extension",
+    )
+    doc = session.model_dump()
+    doc["createdAt"] = doc["createdAt"].isoformat()
+    await db.team_sessions.insert_one(doc)
+    return session
+
+
+@api_router.get("/team/sessions", response_model=List[Session])
+async def list_team_sessions(lic: Dict[str, Any] = Depends(require_license)):
+    cursor = db.team_sessions.find({"team_id": lic["team_id"]}, {"_id": 0}).sort("createdAt", -1)
+    out: List[Session] = []
+    async for d in cursor:
+        if isinstance(d.get("createdAt"), str):
+            d["createdAt"] = datetime.fromisoformat(d["createdAt"])
+        out.append(Session(**d))
+    return out
+
+
+@api_router.get("/team/sessions/{session_id}", response_model=Session)
+async def get_team_session(session_id: str, lic: Dict[str, Any] = Depends(require_license)):
+    d = await db.team_sessions.find_one({"id": session_id, "team_id": lic["team_id"]}, {"_id": 0})
+    if not d:
+        raise HTTPException(status_code=404, detail="Team session not found")
+    if isinstance(d.get("createdAt"), str):
+        d["createdAt"] = datetime.fromisoformat(d["createdAt"])
+    return Session(**d)
+
+
+@api_router.delete("/team/sessions/{session_id}")
+async def delete_team_session(session_id: str, lic: Dict[str, Any] = Depends(require_license)):
+    r = await db.team_sessions.delete_one({"id": session_id, "team_id": lic["team_id"]})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Team session not found")
+    return {"deleted": True}
+
+
+# --------------------------------------------------------------------------------------
+# Invites
+# --------------------------------------------------------------------------------------
+@api_router.post("/team/invite", response_model=InviteResponse)
+async def team_invite(req: InviteRequest, lic: Dict[str, Any] = Depends(require_license)):
+    if "invites" not in lic.get("features", []):
+        raise HTTPException(status_code=403, detail="Invites not included in this plan")
+    invite_token = f"tci_{secrets.token_urlsafe(16)}"
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    await db.invites.insert_one({
+        "token": invite_token,
+        "team_id": lic["team_id"],
+        "email": req.email,
+        "expires_at": expires_at.isoformat(),
+        "used": False,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+    })
+    return InviteResponse(invite_token=invite_token, expires_at=expires_at, team_id=lic["team_id"])
+
+
+@api_router.post("/team/join", response_model=ActivateResponse)
+async def team_join(req: JoinRequest):
+    inv = await db.invites.find_one({"token": req.invite_token}, {"_id": 0})
+    if not inv or inv.get("used"):
+        return ActivateResponse(valid=False, message="Invalid or already-used invite")
+    try:
+        exp = datetime.fromisoformat(inv["expires_at"])
+    except Exception:
+        exp = datetime.now(timezone.utc)
+    if exp < datetime.now(timezone.utc):
+        return ActivateResponse(valid=False, message="Invite expired")
+
+    lic = await db.licenses.find_one({"team_id": inv["team_id"]}, {"_id": 0})
+    if not lic:
+        return ActivateResponse(valid=False, message="License for team not found")
+    seats_total = lic.get("seats_total") or 0
+    seats_used = lic.get("seats_used", 0)
+    if seats_total and seats_used >= seats_total:
+        return ActivateResponse(valid=False, message="No seats available on this plan")
+
+    await db.licenses.update_one({"key": lic["key"]}, {"$inc": {"seats_used": 1}})
+    await db.invites.update_one({"token": req.invite_token}, {"$set": {"used": True}})
+    token = mint_license_token(lic["key"], lic["team_id"], lic["plan"])
+    return ActivateResponse(
+        valid=True, plan=lic["plan"], features=lic.get("features", []),
+        team_id=lic["team_id"], seats_used=seats_used + 1, seats_total=seats_total,
+        token=token, message="Joined team",
+    )
+
+
+# --------------------------------------------------------------------------------------
+# LEGACY: generate-script proxy (deprecated — extension now calls AI directly)
+# --------------------------------------------------------------------------------------
 class GenerateScriptRequest(BaseModel):
     session: Dict[str, Any]
     framework: str = "playwright"
     model: Optional[str] = None
-    apiKey: Optional[str] = None  # If provided, use user's own Anthropic key
+    apiKey: Optional[str] = None
     provider: Optional[str] = "anthropic"
 
 
@@ -111,320 +351,39 @@ class GenerateScriptResponse(BaseModel):
     provider: str
 
 
-# --------------------------------------------------------------------------------------
-# Routes: meta
-# --------------------------------------------------------------------------------------
-@api_router.get("/")
-async def root():
-    return {"service": "TestCapture AI", "status": "ok"}
-
-
-@api_router.get("/health")
-async def health():
-    return {"status": "healthy", "time": datetime.now(timezone.utc).isoformat()}
-
-
-# --------------------------------------------------------------------------------------
-# Routes: sessions
-# --------------------------------------------------------------------------------------
-@api_router.post("/sessions", response_model=Session)
-async def create_session(payload: SessionCreate):
-    session = Session(
-        name=payload.name,
-        project=payload.project or "default",
-        startTime=payload.startTime,
-        targetOrigin=payload.targetOrigin,
-        steps=[RecordedStep(**s) for s in payload.steps],
-        selectedFramework=payload.selectedFramework,
-    )
-    doc = session.model_dump()
-    doc["createdAt"] = doc["createdAt"].isoformat()
-    await db.sessions.insert_one(doc)
-    return session
-
-
-@api_router.get("/sessions", response_model=List[Session])
-async def list_sessions():
-    docs = await db.sessions.find({}, {"_id": 0}).sort("createdAt", -1).to_list(200)
-    result = []
-    for d in docs:
-        if isinstance(d.get("createdAt"), str):
-            d["createdAt"] = datetime.fromisoformat(d["createdAt"])
-        result.append(Session(**d))
-    return result
-
-
-@api_router.get("/sessions/{session_id}", response_model=Session)
-async def get_session(session_id: str):
-    doc = await db.sessions.find_one({"id": session_id}, {"_id": 0})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Session not found")
-    if isinstance(doc.get("createdAt"), str):
-        doc["createdAt"] = datetime.fromisoformat(doc["createdAt"])
-    return Session(**doc)
-
-
-@api_router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str):
-    r = await db.sessions.delete_one({"id": session_id})
-    if r.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return {"deleted": True}
-
-
-# --------------------------------------------------------------------------------------
-# Claude proxy
-# --------------------------------------------------------------------------------------
-SYSTEM_PROMPT = """You are an expert Test Automation Engineer. Given a recorded browser session (JSON of user steps including selectors, values, and assertions), you produce a single, clean, runnable automation script in the requested framework.
-
-Rules:
-- Output ONLY the code. No markdown fences, no commentary, no explanations.
-- Use the highest-priority selector available per step (prefer data-testid > aria-label > role > id > CSS > XPath).
-- Add concise inline comments matching the step labels.
-- Preserve the order of steps exactly.
-- For password fields, values will already be redacted as "********" — keep a placeholder variable instead.
-- Ensure the script is production-shaped: waits on navigation, appropriate asserts, proper imports, and a single test function.
-- Target the latest stable version of the framework."""
-
-
-FRAMEWORK_TEMPLATES = {
-    "playwright": "Language: TypeScript. Use @playwright/test. Export one test().",
-    "cypress": "Language: JavaScript. Use describe/it. Cypress 13+. Use cy.* chain.",
-    "selenium": "Language: Python. Use selenium 4, webdriver-manager, pytest-style function.",
-    "karate": "Language: Karate DSL (.feature). Use Feature/Scenario/Given/When/Then.",
-}
-
-
-def _assert_lines(framework: str, selector_val: str, strategy: str, assertions: List[Dict[str, Any]]) -> List[str]:
-    """Produce framework-specific lines for a list of structured assertions."""
-    out: List[str] = []
-    if not assertions:
-        return out
-    if framework == "playwright":
-        loc = (
-            f"page.getByTestId('{selector_val}')" if strategy == "data-testid"
-            else f"page.getByLabel('{selector_val}')" if strategy == "aria-label"
-            else f"page.getByRole('{selector_val}')" if strategy == "role"
-            else f"page.locator('{selector_val}')"
-        )
-        for a in assertions:
-            t = a.get("type", "containsText"); exp = a.get("expected") or ""
-            if t == "containsText": out.append(f"  await expect({loc}).toContainText('{exp}');")
-            elif t == "visible": out.append(f"  await expect({loc}).toBeVisible();")
-            elif t == "exists": out.append(f"  await expect({loc}).toBeAttached();")
-            elif t == "countEquals": out.append(f"  await expect({loc}).toHaveCount({int(exp or 1)});")
-            elif t == "valueEquals": out.append(f"  await expect({loc}).toHaveValue('{exp}');")
-            elif t == "urlContains": out.append(f"  await expect(page).toHaveURL(/{exp}/);")
-            else: out.append(f"  // assertion: {t} expected={exp}")
-    elif framework == "cypress":
-        get = f"cy.get('[data-testid=\"{selector_val}\"]')" if strategy == "data-testid" else f"cy.get('{selector_val}')"
-        for a in assertions:
-            t = a.get("type", "containsText"); exp = a.get("expected") or ""
-            if t == "containsText": out.append(f"    {get}.should('contain.text', '{exp}');")
-            elif t == "visible": out.append(f"    {get}.should('be.visible');")
-            elif t == "exists": out.append(f"    {get}.should('exist');")
-            elif t == "countEquals": out.append(f"    {get}.should('have.length', {int(exp or 1)});")
-            elif t == "valueEquals": out.append(f"    {get}.should('have.value', '{exp}');")
-            elif t == "urlContains": out.append(f"    cy.url().should('include', '{exp}');")
-    elif framework == "selenium":
-        by = "By.XPATH" if strategy == "xpath" else "By.CSS_SELECTOR"
-        val = f'[data-testid="{selector_val}"]' if strategy == "data-testid" else selector_val
-        for a in assertions:
-            t = a.get("type", "containsText"); exp = a.get("expected") or ""
-            if t == "containsText": out.append(f"    assert '{exp}' in driver.find_element({by}, '{val}').text")
-            elif t == "visible": out.append(f"    assert driver.find_element({by}, '{val}').is_displayed()")
-            elif t == "exists": out.append(f"    assert driver.find_element({by}, '{val}') is not None")
-            elif t == "valueEquals": out.append(f"    assert driver.find_element({by}, '{val}').get_attribute('value') == '{exp}'")
-            elif t == "urlContains": out.append(f"    assert '{exp}' in driver.current_url")
-    elif framework == "karate":
-        for a in assertions:
-            t = a.get("type", "containsText"); exp = a.get("expected") or ""
-            if t == "containsText": out.append(f'    * match text("{selector_val}") contains "{exp}"')
-            elif t == "visible": out.append(f'    * waitFor("{selector_val}")')
-            elif t == "urlContains": out.append(f'    * match driver.url contains "{exp}"')
-    return out
-
-
-def _fallback_generate(session: Dict[str, Any], framework: str) -> str:
-    """Offline deterministic template used when no LLM key is available."""
+def _offline_generate(session: Dict[str, Any], framework: str) -> str:
+    # Minimal server-side fallback for legacy clients; matches extension/ai.js offline output shape.
     steps = session.get("steps", [])
     name = session.get("name", "Recorded test")
     origin = session.get("targetOrigin") or "https://example.com"
-    lines: List[str] = []
-
     if framework == "playwright":
-        lines.append("import { test, expect } from '@playwright/test';")
-        lines.append("")
-        lines.append(f"test('{name}', async ({{ page }}) => {{")
-        lines.append(f"  await page.goto('{origin}');")
+        lines = ["import { test, expect } from '@playwright/test';", "",
+                 f"test('{name}', async ({{ page }}) => {{", f"  await page.goto('{origin}');"]
         for s in steps:
-            label = s.get("label", s.get("type", "step"))
-            sel = (s.get("selector") or {}).get("value") or ""
-            strategy = (s.get("selector") or {}).get("strategy") or "css"
-            locator = (
-                f"page.getByTestId('{sel}')" if strategy == "data-testid"
-                else f"page.getByRole('{sel}')" if strategy == "role"
-                else f"page.getByLabel('{sel}')" if strategy == "aria-label"
-                else f"page.locator('{sel}')"
-            )
-            if s["type"] == "click":
-                lines.append(f"  // {label}")
-                lines.append(f"  await {locator}.click();")
-            elif s["type"] == "type":
-                val = s.get("value", "")
-                lines.append(f"  // {label}")
-                lines.append(f"  await {locator}.fill('{val}');")
-            elif s["type"] == "navigate":
+            sv = (s.get("selector") or {}).get("value", "")
+            if s.get("type") == "click":
+                lines.append(f"  await page.locator('{sv}').click();")
+            elif s.get("type") == "type":
+                lines.append(f"  await page.locator('{sv}').fill('{s.get('value','')}');")
+            elif s.get("type") == "navigate":
                 lines.append(f"  await page.goto('{s.get('value','')}');")
-            elif s["type"] == "validate":
-                exp = s.get("value", "")
-                lines.append(f"  // Assert: {label}")
-                lines.append(f"  await expect({locator}).toContainText('{exp}');")
-            elif s["type"] == "select":
-                lines.append(f"  await {locator}.selectOption('{s.get('value','')}');")
-            # extra structured assertions on this step
-            lines.extend(_assert_lines("playwright", sel, strategy, s.get("assertions", [])))
+            elif s.get("type") == "validate":
+                lines.append(f"  await expect(page.locator('{sv}')).toContainText('{s.get('value','')}');")
         lines.append("});")
         return "\n".join(lines)
-
-    if framework == "cypress":
-        lines.append(f"describe('{name}', () => {{")
-        lines.append("  it('runs the captured flow', () => {")
-        lines.append(f"    cy.visit('{origin}');")
-        for s in steps:
-            sel = (s.get("selector") or {}).get("value") or ""
-            strategy = (s.get("selector") or {}).get("strategy") or "css"
-            get = f"cy.get('[data-testid=\"{sel}\"]')" if strategy == "data-testid" else f"cy.get('{sel}')"
-            if s["type"] == "click":
-                lines.append(f"    {get}.click();")
-            elif s["type"] == "type":
-                lines.append(f"    {get}.type('{s.get('value','')}');")
-            elif s["type"] == "navigate":
-                lines.append(f"    cy.visit('{s.get('value','')}');")
-            elif s["type"] == "validate":
-                lines.append(f"    {get}.should('contain.text', '{s.get('value','')}');")
-            lines.extend(_assert_lines("cypress", sel, strategy, s.get("assertions", [])))
-        lines.append("  });")
-        lines.append("});")
-        return "\n".join(lines)
-
-    if framework == "selenium":
-        lines.append("from selenium import webdriver")
-        lines.append("from selenium.webdriver.common.by import By")
-        lines.append("from selenium.webdriver.support.ui import WebDriverWait")
-        lines.append("from selenium.webdriver.support import expected_conditions as EC")
-        lines.append("")
-        fn_name = name.lower().replace(" ", "_")
-        lines.append(f"def test_{fn_name}():")
-        lines.append("    driver = webdriver.Chrome()")
-        lines.append(f"    driver.get('{origin}')")
-        lines.append("    wait = WebDriverWait(driver, 10)")
-        for s in steps:
-            sel = (s.get("selector") or {}).get("value") or ""
-            strategy = (s.get("selector") or {}).get("strategy") or "css"
-            by = "By.CSS_SELECTOR" if strategy != "xpath" else "By.XPATH"
-            if s["type"] == "click":
-                lines.append(f"    wait.until(EC.element_to_be_clickable(({by}, '{sel}'))).click()")
-            elif s["type"] == "type":
-                lines.append(f"    driver.find_element({by}, '{sel}').send_keys('{s.get('value','')}')")
-            elif s["type"] == "navigate":
-                lines.append(f"    driver.get('{s.get('value','')}')")
-            elif s["type"] == "validate":
-                lines.append(f"    assert '{s.get('value','')}' in driver.find_element({by}, '{sel}').text")
-            lines.extend(_assert_lines("selenium", sel, strategy, s.get("assertions", [])))
-        lines.append("    driver.quit()")
-        return "\n".join(lines)
-
-    # karate
-    lines.append(f"Feature: {name}")
-    lines.append("")
-    lines.append("  Scenario: Captured flow")
-    lines.append("    * configure driver = { type: 'chrome' }")
-    lines.append(f"    * driver '{origin}'")
-    for s in steps:
-        sel = (s.get("selector") or {}).get("value") or ""
-        strategy = (s.get("selector") or {}).get("strategy") or "css"
-        if s["type"] == "click":
-            lines.append(f"    * click(\"{sel}\")")
-        elif s["type"] == "type":
-            lines.append(f"    * input(\"{sel}\", \"{s.get('value','')}\")")
-        elif s["type"] == "navigate":
-            lines.append(f"    * driver '{s.get('value','')}'")
-        elif s["type"] == "validate":
-            lines.append(f"    * match text(\"{sel}\") contains \"{s.get('value','')}\"")
-        lines.extend(_assert_lines("karate", sel, strategy, s.get("assertions", [])))
-    return "\n".join(lines)
+    return f"// legacy fallback for {framework}\n// {len(steps)} steps captured"
 
 
 @api_router.post("/generate-script", response_model=GenerateScriptResponse)
-async def generate_script(req: GenerateScriptRequest):
+async def legacy_generate_script(req: GenerateScriptRequest):
     framework = (req.framework or "playwright").lower()
-    if framework not in FRAMEWORK_TEMPLATES:
-        raise HTTPException(status_code=400, detail=f"Unsupported framework: {framework}")
-
-    # Determine key + provider
-    user_key = (req.apiKey or "").strip()
-    provider = (req.provider or "anthropic").lower()
-    model = req.model or ("claude-sonnet-4-5-20250929" if provider == "anthropic" else "gpt-5.1")
-
-    # If user didn't supply a key, fall back to Emergent universal key (works via emergentintegrations)
-    emergent_key = os.environ.get("EMERGENT_LLM_KEY", "")
-    api_key = user_key or emergent_key
-
-    # Strip screenshots from the payload to keep prompt small
-    sanitized = dict(req.session)
-    sanitized["steps"] = [
-        {k: v for k, v in s.items() if k != "screenshot"} for s in sanitized.get("steps", [])
-    ]
-
-    import json as _json
-
-    user_text = (
-        f"Framework: {framework}\n"
-        f"{FRAMEWORK_TEMPLATES[framework]}\n\n"
-        f"Session JSON:\n```json\n{_json.dumps(sanitized, indent=2)}\n```\n\n"
-        "Produce the single clean script now."
+    code = _offline_generate(req.session, framework)
+    return GenerateScriptResponse(
+        framework=framework,
+        code=f"// [LEGACY] Extension now calls providers directly. Upgrade to v1.1+ to use Copilot/Anthropic/OpenAI from the client.\n{code}",
+        model="legacy-offline",
+        provider="local",
     )
-
-    if not api_key:
-        # No key available — return deterministic offline template.
-        code = _fallback_generate(sanitized, framework)
-        return GenerateScriptResponse(
-            framework=framework, code=code, model="offline-template", provider="local"
-        )
-
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage  # type: ignore
-
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"tc-{uuid.uuid4().hex[:8]}",
-            system_message=SYSTEM_PROMPT,
-        ).with_model(provider, model)
-        response = await chat.send_message(UserMessage(text=user_text))
-        # Strip code fences if model wraps them
-        code = (response or "").strip()
-        if code.startswith("```"):
-            parts = code.split("```")
-            # ['', 'lang\ncode', ''] or ['', 'code', '']
-            if len(parts) >= 2:
-                body = parts[1]
-                if "\n" in body:
-                    body = body.split("\n", 1)[1]
-                code = body.strip()
-        return GenerateScriptResponse(
-            framework=framework, code=code, model=model, provider=provider
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("LLM generation failed: %s", exc)
-        # Fall back to offline template so the UI never breaks.
-        code = _fallback_generate(sanitized, framework)
-        return GenerateScriptResponse(
-            framework=framework,
-            code=f"// LLM call failed ({exc.__class__.__name__}). Offline template below.\n" + code,
-            model="offline-template",
-            provider="local",
-        )
 
 
 # --------------------------------------------------------------------------------------
@@ -437,7 +396,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*", "X-License-Token"],
 )
 
 

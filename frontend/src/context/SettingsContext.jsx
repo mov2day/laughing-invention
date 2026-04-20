@@ -1,29 +1,25 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { getSettings, setSettings as writeAISettings } from "@/lib/ai";
 
 const SettingsContext = createContext(null);
 
 const DEFAULT = {
-  apiKey: "",
-  model: "claude-sonnet-4-5-20250929",
-  provider: "anthropic",
+  provider: "offline",
+  model: null,
+  apiKey: "",       // Anthropic
+  openaiKey: "",    // OpenAI
   framework: "playwright",
 };
 
 export function SettingsProvider({ children }) {
-  const [settings, setSettings] = useState(() => {
-    try {
-      const raw = localStorage.getItem("tc_web_settings");
-      return raw ? { ...DEFAULT, ...JSON.parse(raw) } : DEFAULT;
-    } catch {
-      return DEFAULT;
-    }
-  });
+  const [settings, setSettings] = useState(() => ({ ...DEFAULT, ...getSettings() }));
 
-  useEffect(() => {
-    localStorage.setItem("tc_web_settings", JSON.stringify(settings));
-  }, [settings]);
+  useEffect(() => { writeAISettings(settings); }, [settings]);
 
-  const update = (patch) => setSettings((s) => ({ ...s, ...patch }));
+  const update = (patchOrReplace) => {
+    if (typeof patchOrReplace === "function") setSettings(patchOrReplace);
+    else setSettings((s) => ({ ...s, ...patchOrReplace }));
+  };
 
   return (
     <SettingsContext.Provider value={{ settings, setSettings: update }}>

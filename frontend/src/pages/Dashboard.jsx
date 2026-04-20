@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import axios from "axios";
 import { Highlight, themes } from "prism-react-renderer";
-import { Copy, Download, RefreshCw, Plus, Trash2, Settings as SettingsIcon, ShieldCheck, X, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { Copy, Download, RefreshCw, Plus, Trash2, Settings as SettingsIcon, ShieldCheck, X, PanelRightClose, PanelRightOpen, Users } from "lucide-react";
 import { demoSession } from "@/data/demoSession";
 import { offlineGenerate } from "@/lib/generate";
+import { generate as aiGenerate, getLicense } from "@/lib/ai";
 import { useSettings } from "@/context/SettingsContext";
 import SettingsModal from "@/components/SettingsModal";
 import AddAssertionModal from "@/components/AddAssertionModal";
@@ -35,8 +35,51 @@ export default function Dashboard() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addAssertOpen, setAddAssertOpen] = useState(false);
   const [toast, setToast] = useState(null);
-  const [inspectorTab, setInspectorTab] = useState("selectors"); // selectors | assertions | properties
+  const [inspectorTab, setInspectorTab] = useState("selectors");
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const [license, setLicense] = useState(getLicense());
+  const [teamSessions, setTeamSessions] = useState([]);
+
+  useEffect(() => {
+    const h = setInterval(() => setLicense(getLicense()), 1500);
+    return () => clearInterval(h);
+  }, []);
+
+  useEffect(() => {
+    async function loadTeam() {
+      if (!license?.token) { setTeamSessions([]); return; }
+      try {
+        const r = await fetch(`${API}/team/sessions`, { headers: { "X-License-Token": license.token } });
+        if (r.ok) setTeamSessions(await r.json());
+      } catch {}
+    }
+    loadTeam();
+  }, [license?.token]);
+
+  async function shareToTeam() {
+    if (!license?.token) { showToast("Activate a team key in Settings first"); return; }
+    try {
+      const r = await fetch(`${API}/team/sessions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "X-License-Token": license.token },
+        body: JSON.stringify({
+          name: session.name,
+          startTime: session.startTime,
+          targetOrigin: session.targetOrigin,
+          steps: session.steps,
+          selectedFramework: framework,
+          generatedCode: { [framework]: code },
+        }),
+      });
+      if (r.ok) {
+        const saved = await r.json();
+        setTeamSessions((xs) => [saved, ...xs]);
+        showToast("Shared to team");
+      } else {
+        showToast(`Share failed (${r.status})`);
+      }
+    } catch (e) { showToast("Network error"); }
+  }
 
   useEffect(() => { setCode(offlineGenerate(session, framework)); setCodeMeta("OFFLINE"); }, [currentId, framework, session]);
 
@@ -54,21 +97,18 @@ export default function Dashboard() {
     setIsGenerating(true);
     setCodeMeta("GENERATING…");
     try {
-      const res = await axios.post(`${API}/generate-script`, {
-        session, framework,
-        apiKey: settings.apiKey || undefined,
-        model: settings.model, provider: settings.provider || "anthropic",
-      });
+      const res = await aiGenerate({ session, framework });
       if (res.data?.code) {
         setCode(res.data.code);
-        setCodeMeta((res.data.model || "LLM").toUpperCase());
-        showToast(res.data.model === "offline-template" ? "Using offline template — add key in Settings" : `Generated with ${res.data.model}`);
+        setCodeMeta(`${(res.data.provider || "").toUpperCase()} · ${(res.data.model || "").toUpperCase()}`);
+        if (!res.ok) showToast(res.error || "Falling back to offline template");
+        else showToast(`Generated via ${res.data.provider}`);
       }
     } catch (e) {
       console.error(e);
       setCode(offlineGenerate(session, framework));
       setCodeMeta("OFFLINE · FALLBACK");
-      showToast("AI call failed — showing offline template");
+      showToast("Generation failed — offline template shown");
     } finally { setIsGenerating(false); }
   }
 
@@ -124,6 +164,19 @@ export default function Dashboard() {
               </div>
             </button>
           ))}
+          {teamSessions.length > 0 && (
+            <>
+              <div className="micro text-blue-400 mt-4 mb-2 flex items-center gap-1"><Users size={10}/> TEAM · {teamSessions.length}</div>
+              {teamSessions.map((s) => (
+                <div key={s.id} className="border border-blue-500/30 bg-blue-500/5 rounded p-3" data-testid={`team-session-${s.id}`}>
+                  <div className="text-sm font-semibold truncate">{s.name}</div>
+                  <div className="font-mono text-[10px] text-zinc-500 mt-1 uppercase tracking-[0.08em]">
+                    shared · {s.steps?.length || 0} steps · {s.shared_by || "teammate"}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
         <div className="border-t border-zinc-800 mt-4 pt-4 flex flex-col gap-2">
           <button className="btn btn-sm" onClick={() => showToast("Use the extension to record a real session")} data-testid="dash-new-session">
@@ -142,9 +195,10 @@ export default function Dashboard() {
           <div className="min-w-0">
             <div className="micro text-zinc-500">SESSION</div>
             <h1 className="font-display text-xl sm:text-2xl font-bold tracking-tight mt-1 truncate" data-testid="dash-session-name">{session.name}</h1>
-            <div className="font-mono text-[11px] text-zinc-500 mt-1.5 truncate">
-              {session.targetOrigin} · <span className="text-emerald-400">{session.status}</span> · {session.steps.length} steps
-            </div>
+          <div className="font-mono text-[11px] text-zinc-500 mt-1.5 truncate">
+            {session.targetOrigin} · <span className="text-emerald-400">{session.status}</span> · {session.steps.length} steps
+            {license?.valid && <span className="ml-2 text-blue-400">· TEAM · {license.plan?.toUpperCase()}</span>}
+          </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -160,6 +214,11 @@ export default function Dashboard() {
             </button>
             <button className="btn btn-primary" onClick={copy} data-testid="copy-code-btn"><Copy size={12}/> Copy</button>
             <button className="btn" onClick={download} data-testid="download-btn"><Download size={12}/> Download</button>
+            {license?.valid && (
+              <button className="btn" onClick={shareToTeam} title={`Share to ${license.team_id}`} data-testid="share-team-btn">
+                <Users size={12}/> Share to team
+              </button>
+            )}
             <button className="btn btn-ghost btn-sm" onClick={() => setInspectorCollapsed((v) => !v)} title="Toggle inspector" data-testid="toggle-inspector-btn">
               {inspectorCollapsed ? <PanelRightOpen size={14}/> : <PanelRightClose size={14}/>}
             </button>
